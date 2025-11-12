@@ -1,0 +1,123 @@
+import { Link } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Trash2, Plus, Minus, ShoppingBag } from 'lucide-react'
+import { useCart } from '../contexts/CartContext'
+
+export default function Cart() {
+  const { items, removeFromCart, updateQuantity, total, itemCount } = useCart()
+
+  const gst = total * 0.18 // 18% GST
+  const finalTotal = total + gst
+
+  if (itemCount === 0) {
+    return (
+      <div className="min-h-screen py-16 flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <ShoppingBag size={64} className="mx-auto mb-4 text-gray-400" />
+          <h2 className="text-2xl font-bold mb-2">Your cart is empty</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">Add some products to get started</p>
+          <Link to="/products" className="btn-primary inline-block">
+            Shop Now
+          </Link>
+        </motion.div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h1 className="text-4xl font-bold mb-8">Shopping Cart</h1>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Cart Items */}
+          <div className="lg:col-span-2 space-y-4">
+            <AnimatePresence>
+              {items.map((item) => (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="card flex items-center space-x-4"
+                >
+                  {item.image_url ? (
+                    <img
+                      src={item.image_url}
+                      alt={item.name}
+                      className="w-24 h-24 object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                      <ShoppingBag size={32} className="text-gray-400" />
+                    </div>
+                  )}
+
+                  <div className="flex-grow">
+                    <h3 className="font-semibold text-lg">{item.name}</h3>
+                    <p className="text-primary font-bold">₹{item.price}</p>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      className="w-8 h-8 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center"
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <span className="w-8 text-center font-semibold">{item.quantity}</span>
+                    <button
+                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      className="w-8 h-8 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="font-bold text-lg">₹{item.price * item.quantity}</p>
+                    <button
+                      onClick={() => removeFromCart(item.id)}
+                      className="text-red-500 hover:text-red-700 mt-2"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
+          {/* Order Summary */}
+          <div className="lg:col-span-1">
+            <div className="card sticky top-24">
+              <h2 className="text-2xl font-bold mb-6">Order Summary</h2>
+              <div className="space-y-4 mb-6">
+                <div className="flex justify-between">
+                  <span>Subtotal ({itemCount} items)</span>
+                  <span className="font-semibold">₹{total.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>GST (18%)</span>
+                  <span className="font-semibold">₹{gst.toFixed(2)}</span>
+                </div>
+                <div className="border-t border-gray-300 dark:border-gray-700 pt-4 flex justify-between text-xl font-bold">
+                  <span>Total</span>
+                  <span className="text-primary">₹{finalTotal.toFixed(2)}</span>
+                </div>
+              </div>
+              <Link to="/checkout" className="btn-primary w-full block text-center">
+                Proceed to Checkout
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
