@@ -9,7 +9,7 @@ export default defineConfig({
     host: true
   },
   build: {
-    chunkSizeWarningLimit: 1000, // Set to 1000 KB (1 MB) to suppress warnings for larger chunks
+    chunkSizeWarningLimit: 2000, // Set to 2000 KB (2 MB) to suppress warnings for larger chunks
   }
 })
 
