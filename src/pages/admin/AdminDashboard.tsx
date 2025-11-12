@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   LayoutDashboard, 
   Package, 
@@ -9,7 +9,9 @@ import {
   LogOut,
   TrendingUp,
   AlertCircle,
-  CreditCard
+  CreditCard,
+  Menu,
+  X
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import Inventory from './Inventory'
@@ -21,6 +23,7 @@ import Invoices from './Invoices'
 export default function AdminDashboard() {
   const location = useLocation()
   const navigate = useNavigate()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [stats, setStats] = useState({
     totalSales: 0,
     ordersToday: 0,
@@ -79,9 +82,88 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-white dark:bg-gray-800 shadow-lg glass"
+        aria-label="Toggle menu"
+      >
+        {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
+      </button>
+
       {/* Sidebar */}
-      <div className="fixed left-0 top-0 h-full w-64 glass border-r border-white/20 dark:border-gray-700/20 z-40">
-        <div className="p-6">
+      <AnimatePresence>
+        {sidebarOpen && (
+          <>
+            {/* Mobile Overlay */}
+            {sidebarOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSidebarOpen(false)}
+                className="lg:hidden fixed inset-0 bg-black/50 z-40"
+              />
+            )}
+            
+            {/* Sidebar */}
+            <motion.div
+              initial={{ x: -256 }}
+              animate={{ x: 0 }}
+              exit={{ x: -256 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed left-0 top-0 h-full w-64 glass border-r border-white/20 dark:border-gray-700/20 z-40 lg:static lg:translate-x-0"
+            >
+              <div className="p-4 sm:p-6 h-full overflow-y-auto">
+                <div className="flex items-center justify-between mb-6 lg:mb-8">
+                  <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary to-primary-light bg-clip-text text-transparent">
+                    Admin Panel
+                  </h2>
+                  <button
+                    onClick={() => setSidebarOpen(false)}
+                    className="lg:hidden p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+                    aria-label="Close menu"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <nav className="space-y-2">
+                  {menuItems.map((item) => {
+                    const Icon = item.icon
+                    const isActive = location.pathname === item.path
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`flex items-center space-x-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl transition-all text-sm sm:text-base ${
+                          isActive
+                            ? 'bg-primary text-white'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        <Icon size={18} className="flex-shrink-0" />
+                        <span className="font-medium">{item.label}</span>
+                      </Link>
+                    )
+                  })}
+                </nav>
+                <button
+                  onClick={handleLogout}
+                  className="mt-6 sm:mt-8 w-full flex items-center space-x-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-sm sm:text-base"
+                >
+                  <LogOut size={18} className="flex-shrink-0" />
+                  <span className="font-medium">Logout</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Desktop Sidebar (always visible on large screens) */}
+      <div className="hidden lg:block fixed left-0 top-0 h-full w-64 glass border-r border-white/20 dark:border-gray-700/20 z-40">
+        <div className="p-6 h-full overflow-y-auto">
           <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary-light bg-clip-text text-transparent mb-8">
             Admin Panel
           </h2>
@@ -116,26 +198,26 @@ export default function AdminDashboard() {
       </div>
 
       {/* Main Content */}
-      <div className="ml-64 p-8">
+      <div className="lg:ml-64 p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8">
         <Routes>
           <Route
             path="dashboard"
             element={
               <div>
-                <h1 className="text-4xl font-bold mb-8">Dashboard</h1>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-4 sm:mb-6 lg:mb-8">Dashboard</h1>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="card"
                   >
                     <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-gray-600 dark:text-gray-400 mb-1">Total Sales</p>
-                        <p className="text-3xl font-bold text-primary">₹{stats.totalSales.toFixed(2)}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-600 dark:text-gray-400 mb-1 text-sm sm:text-base">Total Sales</p>
+                        <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-primary truncate">₹{stats.totalSales.toFixed(2)}</p>
                       </div>
-                      <div className="p-4 bg-primary/10 rounded-full">
-                        <TrendingUp className="text-primary" size={32} />
+                      <div className="p-3 sm:p-4 bg-primary/10 rounded-full flex-shrink-0 ml-2">
+                        <TrendingUp className="text-primary" size={24} className="sm:w-8 sm:h-8" />
                       </div>
                     </div>
                   </motion.div>
@@ -147,12 +229,12 @@ export default function AdminDashboard() {
                     className="card"
                   >
                     <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-gray-600 dark:text-gray-400 mb-1">Orders Today</p>
-                        <p className="text-3xl font-bold text-primary">{stats.ordersToday}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-600 dark:text-gray-400 mb-1 text-sm sm:text-base">Orders Today</p>
+                        <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-primary">{stats.ordersToday}</p>
                       </div>
-                      <div className="p-4 bg-blue-500/10 rounded-full">
-                        <ShoppingCart className="text-blue-500" size={32} />
+                      <div className="p-3 sm:p-4 bg-blue-500/10 rounded-full flex-shrink-0 ml-2">
+                        <ShoppingCart className="text-blue-500" size={24} className="sm:w-8 sm:h-8" />
                       </div>
                     </div>
                   </motion.div>
@@ -164,12 +246,12 @@ export default function AdminDashboard() {
                     className="card"
                   >
                     <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-gray-600 dark:text-gray-400 mb-1">Low Stock Alerts</p>
-                        <p className="text-3xl font-bold text-red-600">{stats.lowStockCount}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-600 dark:text-gray-400 mb-1 text-sm sm:text-base">Low Stock Alerts</p>
+                        <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600">{stats.lowStockCount}</p>
                       </div>
-                      <div className="p-4 bg-red-500/10 rounded-full">
-                        <AlertCircle className="text-red-500" size={32} />
+                      <div className="p-3 sm:p-4 bg-red-500/10 rounded-full flex-shrink-0 ml-2">
+                        <AlertCircle className="text-red-500" size={24} className="sm:w-8 sm:h-8" />
                       </div>
                     </div>
                   </motion.div>

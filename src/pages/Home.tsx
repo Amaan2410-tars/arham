@@ -43,7 +43,7 @@ export default function Home() {
   return (
     <div className="min-h-screen">
       {/* Hero Banner */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary-light to-blue-600 text-white py-20">
+      <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary-light to-blue-600 text-white py-12 sm:py-16 lg:py-20">
         <div className="absolute inset-0 bg-black/10"></div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -52,10 +52,10 @@ export default function Home() {
             transition={{ duration: 0.6 }}
             className="text-center"
           >
-            <h1 className="text-5xl md:text-6xl font-bold mb-6">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 sm:mb-6 px-4">
               Welcome to Arham Stationary
             </h1>
-            <p className="text-xl md:text-2xl mb-8 text-blue-100">
+            <p className="text-base sm:text-lg md:text-xl lg:text-2xl mb-6 sm:mb-8 text-blue-100 px-4">
               Your one-stop shop for all stationery and disposal needs
             </p>
             <Link to="/products" className="btn-primary inline-block text-lg">
@@ -95,8 +95,8 @@ export default function Home() {
       {categories.length > 0 && (
         <section className="py-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="text-3xl font-bold text-center mb-12">Shop by Category</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8 lg:mb-12">Shop by Category</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
               {categories.map((category, idx) => (
                 <motion.div
                   key={idx}
@@ -123,13 +123,13 @@ export default function Home() {
       {featuredProducts.length > 0 && (
         <section className="py-16 bg-gray-50 dark:bg-gray-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center mb-12">
-              <h2 className="text-3xl font-bold">Featured Products</h2>
-              <Link to="/products" className="text-primary hover:underline">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 lg:mb-12 gap-4">
+              <h2 className="text-2xl sm:text-3xl font-bold">Featured Products</h2>
+              <Link to="/products" className="text-primary hover:underline text-sm sm:text-base">
                 View All →
               </Link>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {featuredProducts.map((product, idx) => (
                 <motion.div
                   key={product.id}

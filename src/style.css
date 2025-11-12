@@ -16,14 +16,28 @@
   }
   
   .btn-primary {
-    @apply bg-gradient-to-r from-primary to-primary-light text-white px-6 py-3 rounded-2xl font-medium shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95;
+    @apply bg-gradient-to-r from-primary to-primary-light text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-medium shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm sm:text-base touch-manipulation;
   }
   
   .btn-secondary {
-    @apply bg-white dark:bg-gray-800 text-primary border-2 border-primary px-6 py-3 rounded-2xl font-medium hover:bg-primary/10 transition-all duration-300;
+    @apply bg-white dark:bg-gray-800 text-primary border-2 border-primary px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-medium hover:bg-primary/10 transition-all duration-300 text-sm sm:text-base touch-manipulation;
   }
   
   .card {
-    @apply glass rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300;
+    @apply glass rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-300;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .touch-manipulation {
+    touch-action: manipulation;
   }
 }
