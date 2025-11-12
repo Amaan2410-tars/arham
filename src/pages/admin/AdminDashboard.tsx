@@ -217,7 +217,7 @@ export default function AdminDashboard() {
                         <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-primary truncate">₹{stats.totalSales.toFixed(2)}</p>
                       </div>
                       <div className="p-3 sm:p-4 bg-primary/10 rounded-full flex-shrink-0 ml-2">
-                        <TrendingUp className="text-primary" size={24} className="sm:w-8 sm:h-8" />
+                        <TrendingUp className="text-primary w-6 h-6 sm:w-8 sm:h-8" />
                       </div>
                     </div>
                   </motion.div>
@@ -234,7 +234,7 @@ export default function AdminDashboard() {
                         <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-primary">{stats.ordersToday}</p>
                       </div>
                       <div className="p-3 sm:p-4 bg-blue-500/10 rounded-full flex-shrink-0 ml-2">
-                        <ShoppingCart className="text-blue-500" size={24} className="sm:w-8 sm:h-8" />
+                        <ShoppingCart className="text-blue-500 w-6 h-6 sm:w-8 sm:h-8" />
                       </div>
                     </div>
                   </motion.div>
@@ -251,7 +251,7 @@ export default function AdminDashboard() {
                         <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600">{stats.lowStockCount}</p>
                       </div>
                       <div className="p-3 sm:p-4 bg-red-500/10 rounded-full flex-shrink-0 ml-2">
-                        <AlertCircle className="text-red-500" size={24} className="sm:w-8 sm:h-8" />
+                        <AlertCircle className="text-red-500 w-6 h-6 sm:w-8 sm:h-8" />
                       </div>
                     </div>
                   </motion.div>
