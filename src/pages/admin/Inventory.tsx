@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Plus, Edit, Trash2, Download, Search, Camera, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { BrowserMultiFormatReader } from '@zxing/library'
