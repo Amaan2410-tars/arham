@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Trash2, Download, Search, Calendar } from 'lucide-react'
+import { Trash2, Download, Search, Calendar, CheckCircle, XCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { motion } from 'framer-motion'
 import { generateInvoicePDF } from '../../utils/invoice'
@@ -14,6 +14,8 @@ interface POSSale {
     quantity: number
   }>
   total: number
+  payment_received?: boolean
+  payment_received_at?: string
   created_at: string
 }
 
@@ -82,6 +84,54 @@ export default function Sales() {
     } catch (error: any) {
       console.error('Error deleting sale:', error)
       alert(`Error deleting sale: ${error.message || 'Unknown error'}`)
+    }
+  }
+
+  const handleMarkPaymentReceived = async (sale: POSSale) => {
+    if (!confirm(`Mark payment as received for ${sale.customer_name}?\n\nAmount: ₹${sale.total.toFixed(2)}`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('pos_sales')
+        .update({
+          payment_received: true,
+          payment_received_at: new Date().toISOString()
+        })
+        .eq('id', sale.id)
+
+      if (error) throw error
+
+      alert('Payment marked as received!')
+      fetchSales()
+    } catch (error: any) {
+      console.error('Error marking payment:', error)
+      alert(`Error: ${error.message || 'Unknown error'}`)
+    }
+  }
+
+  const handleMarkPaymentPending = async (sale: POSSale) => {
+    if (!confirm(`Mark payment as pending for ${sale.customer_name}?`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('pos_sales')
+        .update({
+          payment_received: false,
+          payment_received_at: null
+        })
+        .eq('id', sale.id)
+
+      if (error) throw error
+
+      alert('Payment marked as pending!')
+      fetchSales()
+    } catch (error: any) {
+      console.error('Error updating payment status:', error)
+      alert(`Error: ${error.message || 'Unknown error'}`)
     }
   }
 
@@ -190,6 +240,7 @@ export default function Sales() {
                   <th className="text-left py-3 px-4 font-semibold">Customer</th>
                   <th className="text-left py-3 px-4 font-semibold">Items</th>
                   <th className="text-right py-3 px-4 font-semibold">Total</th>
+                  <th className="text-center py-3 px-4 font-semibold">Payment</th>
                   <th className="text-center py-3 px-4 font-semibold">Actions</th>
                 </tr>
               </thead>
@@ -218,7 +269,39 @@ export default function Sales() {
                       ₹{sale.total.toFixed(2)}
                     </td>
                     <td className="py-3 px-4">
+                      <div className="flex items-center justify-center">
+                        {sale.payment_received ? (
+                          <span className="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium flex items-center gap-1">
+                            <CheckCircle size={14} />
+                            Received
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-full text-xs font-medium flex items-center gap-1">
+                            <XCircle size={14} />
+                            Pending
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-2">
+                        {!sale.payment_received ? (
+                          <button
+                            onClick={() => handleMarkPaymentReceived(sale)}
+                            className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                            title="Mark Payment Received"
+                          >
+                            <CheckCircle size={18} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleMarkPaymentPending(sale)}
+                            className="p-2 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg transition-colors"
+                            title="Mark Payment Pending"
+                          >
+                            <XCircle size={18} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDownloadInvoice(sale)}
                           className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
@@ -263,12 +346,53 @@ export default function Sales() {
                       })}
                     </p>
                   </div>
-                  <p className="text-lg font-bold text-primary">₹{sale.total.toFixed(2)}</p>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-primary">₹{sale.total.toFixed(2)}</p>
+                    {sale.payment_received ? (
+                      <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1 mt-1">
+                        <CheckCircle size={12} />
+                        Paid
+                      </span>
+                    ) : (
+                      <span className="text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-1 mt-1">
+                        <XCircle size={12} />
+                        Pending
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                   {sale.items.length} item(s)
                 </p>
+                {sale.payment_received_at && (
+                  <p className="text-xs text-gray-500 mb-2">
+                    Paid on: {new Date(sale.payment_received_at).toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                )}
                 <div className="flex gap-2">
+                  {!sale.payment_received ? (
+                    <button
+                      onClick={() => handleMarkPaymentReceived(sale)}
+                      className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-sm"
+                    >
+                      <CheckCircle size={16} />
+                      <span>Mark Paid</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleMarkPaymentPending(sale)}
+                      className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-sm"
+                    >
+                      <XCircle size={16} />
+                      <span>Mark Pending</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDownloadInvoice(sale)}
                     className="flex-1 btn-secondary flex items-center justify-center gap-2 text-sm"
