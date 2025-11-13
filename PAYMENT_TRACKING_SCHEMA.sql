@@ -1,8 +1,15 @@
--- Add payment_received column to pos_sales table
+-- Add payment_status column to pos_sales table (pending, received, due)
+ALTER TABLE pos_sales 
+ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'pending';
+
+-- Add payment_status column to orders table (pending, received, due)
+ALTER TABLE orders 
+ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'pending';
+
+-- Keep payment_received for backward compatibility (will be calculated from payment_status)
 ALTER TABLE pos_sales 
 ADD COLUMN IF NOT EXISTS payment_received BOOLEAN DEFAULT false;
 
--- Add payment_received column to orders table
 ALTER TABLE orders 
 ADD COLUMN IF NOT EXISTS payment_received BOOLEAN DEFAULT false;
 

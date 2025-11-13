@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Trash2, Download, Search, Calendar, CheckCircle, XCircle } from 'lucide-react'
+import { Trash2, Download, Search, Calendar, CheckCircle, XCircle, CreditCard, AlertCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { motion } from 'framer-motion'
 import { generateInvoicePDF } from '../../utils/invoice'
@@ -15,6 +15,7 @@ interface POSSale {
   }>
   total: number
   payment_received?: boolean
+  payment_status?: 'pending' | 'received' | 'due'
   payment_received_at?: string
   created_at: string
 }
@@ -88,7 +89,7 @@ export default function Sales() {
   }
 
   const handleMarkPaymentReceived = async (sale: POSSale) => {
-    if (!confirm(`Mark payment as received for ${sale.customer_name}?\n\nAmount: ₹${sale.total.toFixed(2)}`)) {
+    if (!confirm(`Mark payment as RECEIVED (Online) for ${sale.customer_name}?\n\nAmount: ₹${sale.total.toFixed(2)}`)) {
       return
     }
 
@@ -96,6 +97,7 @@ export default function Sales() {
       const { error } = await supabase
         .from('pos_sales')
         .update({
+          payment_status: 'received',
           payment_received: true,
           payment_received_at: new Date().toISOString()
         })
@@ -103,7 +105,7 @@ export default function Sales() {
 
       if (error) throw error
 
-      alert('Payment marked as received!')
+      alert('Payment marked as received (Online)!')
       fetchSales()
     } catch (error: any) {
       console.error('Error marking payment:', error)
@@ -111,8 +113,8 @@ export default function Sales() {
     }
   }
 
-  const handleMarkPaymentPending = async (sale: POSSale) => {
-    if (!confirm(`Mark payment as pending for ${sale.customer_name}?`)) {
+  const handleMarkPaymentDue = async (sale: POSSale) => {
+    if (!confirm(`Mark payment as DUE (Customer owes) for ${sale.customer_name}?\n\nAmount: ₹${sale.total.toFixed(2)}`)) {
       return
     }
 
@@ -120,6 +122,32 @@ export default function Sales() {
       const { error } = await supabase
         .from('pos_sales')
         .update({
+          payment_status: 'due',
+          payment_received: false,
+          payment_received_at: null
+        })
+        .eq('id', sale.id)
+
+      if (error) throw error
+
+      alert('Payment marked as due (Customer owes)!')
+      fetchSales()
+    } catch (error: any) {
+      console.error('Error marking payment as due:', error)
+      alert(`Error: ${error.message || 'Unknown error'}`)
+    }
+  }
+
+  const handleMarkPaymentPending = async (sale: POSSale) => {
+    if (!confirm(`Mark payment as PENDING for ${sale.customer_name}?`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('pos_sales')
+        .update({
+          payment_status: 'pending',
           payment_received: false,
           payment_received_at: null
         })
@@ -270,10 +298,15 @@ export default function Sales() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center">
-                        {sale.payment_received ? (
+                        {sale.payment_status === 'received' ? (
                           <span className="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium flex items-center gap-1">
                             <CheckCircle size={14} />
                             Received
+                          </span>
+                        ) : sale.payment_status === 'due' ? (
+                          <span className="px-3 py-1 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded-full text-xs font-medium flex items-center gap-1">
+                            <AlertCircle size={14} />
+                            Due
                           </span>
                         ) : (
                           <span className="px-3 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-full text-xs font-medium flex items-center gap-1">
@@ -285,15 +318,25 @@ export default function Sales() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-2">
-                        {!sale.payment_received ? (
+                        {sale.payment_status !== 'received' && (
                           <button
                             onClick={() => handleMarkPaymentReceived(sale)}
                             className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-                            title="Mark Payment Received"
+                            title="Mark Payment Received (Online)"
                           >
                             <CheckCircle size={18} />
                           </button>
-                        ) : (
+                        )}
+                        {sale.payment_status !== 'due' && (
+                          <button
+                            onClick={() => handleMarkPaymentDue(sale)}
+                            className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            title="Mark Payment Due (Customer Owes)"
+                          >
+                            <CreditCard size={18} />
+                          </button>
+                        )}
+                        {sale.payment_status !== 'pending' && (
                           <button
                             onClick={() => handleMarkPaymentPending(sale)}
                             className="p-2 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg transition-colors"
@@ -348,10 +391,15 @@ export default function Sales() {
                   </div>
                   <div className="text-right">
                     <p className="text-lg font-bold text-primary">₹{sale.total.toFixed(2)}</p>
-                    {sale.payment_received ? (
+                    {sale.payment_status === 'received' ? (
                       <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1 mt-1">
                         <CheckCircle size={12} />
-                        Paid
+                        Received
+                      </span>
+                    ) : sale.payment_status === 'due' ? (
+                      <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1 mt-1">
+                        <AlertCircle size={12} />
+                        Due
                       </span>
                     ) : (
                       <span className="text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-1 mt-1">
@@ -375,38 +423,52 @@ export default function Sales() {
                     })}
                   </p>
                 )}
-                <div className="flex gap-2">
-                  {!sale.payment_received ? (
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    {sale.payment_status !== 'received' && (
+                      <button
+                        onClick={() => handleMarkPaymentReceived(sale)}
+                        className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-sm"
+                      >
+                        <CheckCircle size={16} />
+                        <span>Received</span>
+                      </button>
+                    )}
+                    {sale.payment_status !== 'due' && (
+                      <button
+                        onClick={() => handleMarkPaymentDue(sale)}
+                        className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-sm"
+                      >
+                        <CreditCard size={16} />
+                        <span>Due</span>
+                      </button>
+                    )}
+                    {sale.payment_status !== 'pending' && (
+                      <button
+                        onClick={() => handleMarkPaymentPending(sale)}
+                        className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-sm"
+                      >
+                        <XCircle size={16} />
+                        <span>Pending</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
                     <button
-                      onClick={() => handleMarkPaymentReceived(sale)}
-                      className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-sm"
+                      onClick={() => handleDownloadInvoice(sale)}
+                      className="flex-1 btn-secondary flex items-center justify-center gap-2 text-sm"
                     >
-                      <CheckCircle size={16} />
-                      <span>Mark Paid</span>
+                      <Download size={16} />
+                      <span>Invoice</span>
                     </button>
-                  ) : (
                     <button
-                      onClick={() => handleMarkPaymentPending(sale)}
-                      className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-sm"
+                      onClick={() => handleDelete(sale.id, sale.customer_name, sale.total)}
+                      className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-sm"
                     >
-                      <XCircle size={16} />
-                      <span>Mark Pending</span>
+                      <Trash2 size={16} />
+                      <span>Delete</span>
                     </button>
-                  )}
-                  <button
-                    onClick={() => handleDownloadInvoice(sale)}
-                    className="flex-1 btn-secondary flex items-center justify-center gap-2 text-sm"
-                  >
-                    <Download size={16} />
-                    <span>Invoice</span>
-                  </button>
-                  <button
-                    onClick={() => handleDelete(sale.id, sale.customer_name, sale.total)}
-                    className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-sm"
-                  >
-                    <Trash2 size={16} />
-                    <span>Delete</span>
-                  </button>
+                  </div>
                 </div>
               </motion.div>
             ))}

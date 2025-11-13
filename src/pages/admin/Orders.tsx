@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Eye, Search, CheckCircle, XCircle } from 'lucide-react'
+import { Eye, Search, CheckCircle, XCircle, CreditCard, AlertCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 interface Order {
@@ -12,6 +12,7 @@ interface Order {
   items: any[]
   payment_mode: string
   payment_received?: boolean
+  payment_status?: 'pending' | 'received' | 'due'
   payment_received_at?: string
   created_at: string
 }
@@ -43,7 +44,7 @@ export default function Orders() {
   }
 
   const handleMarkPaymentReceived = async (order: Order) => {
-    if (!confirm(`Mark payment as received for ${order.customer_name}?\n\nAmount: ₹${order.total.toFixed(2)}`)) {
+    if (!confirm(`Mark payment as RECEIVED (Online) for ${order.customer_name}?\n\nAmount: ₹${order.total.toFixed(2)}`)) {
       return
     }
 
@@ -51,6 +52,7 @@ export default function Orders() {
       const { error } = await supabase
         .from('orders')
         .update({
+          payment_status: 'received',
           payment_received: true,
           payment_received_at: new Date().toISOString()
         })
@@ -58,7 +60,7 @@ export default function Orders() {
 
       if (error) throw error
 
-      alert('Payment marked as received!')
+      alert('Payment marked as received (Online)!')
       fetchOrders()
     } catch (error: any) {
       console.error('Error marking payment:', error)
@@ -66,8 +68,8 @@ export default function Orders() {
     }
   }
 
-  const handleMarkPaymentPending = async (order: Order) => {
-    if (!confirm(`Mark payment as pending for ${order.customer_name}?`)) {
+  const handleMarkPaymentDue = async (order: Order) => {
+    if (!confirm(`Mark payment as DUE (Customer owes) for ${order.customer_name}?\n\nAmount: ₹${order.total.toFixed(2)}`)) {
       return
     }
 
@@ -75,6 +77,32 @@ export default function Orders() {
       const { error } = await supabase
         .from('orders')
         .update({
+          payment_status: 'due',
+          payment_received: false,
+          payment_received_at: null
+        })
+        .eq('id', order.id)
+
+      if (error) throw error
+
+      alert('Payment marked as due (Customer owes)!')
+      fetchOrders()
+    } catch (error: any) {
+      console.error('Error marking payment as due:', error)
+      alert(`Error: ${error.message || 'Unknown error'}`)
+    }
+  }
+
+  const handleMarkPaymentPending = async (order: Order) => {
+    if (!confirm(`Mark payment as PENDING for ${order.customer_name}?`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          payment_status: 'pending',
           payment_received: false,
           payment_received_at: null
         })
@@ -148,10 +176,15 @@ export default function Orders() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {order.payment_received ? (
+                      {order.payment_status === 'received' ? (
                         <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium flex items-center gap-1 w-fit">
                           <CheckCircle size={12} />
                           Received
+                        </span>
+                      ) : order.payment_status === 'due' ? (
+                        <span className="px-2 py-1 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded-full text-xs font-medium flex items-center gap-1 w-fit">
+                          <AlertCircle size={12} />
+                          Due
                         </span>
                       ) : (
                         <span className="px-2 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-full text-xs font-medium flex items-center gap-1 w-fit">
@@ -165,15 +198,25 @@ export default function Orders() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        {!order.payment_received ? (
+                        {order.payment_status !== 'received' && (
                           <button
                             onClick={() => handleMarkPaymentReceived(order)}
                             className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-                            title="Mark Payment Received"
+                            title="Mark Payment Received (Online)"
                           >
                             <CheckCircle size={18} />
                           </button>
-                        ) : (
+                        )}
+                        {order.payment_status !== 'due' && (
+                          <button
+                            onClick={() => handleMarkPaymentDue(order)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            title="Mark Payment Due (Customer Owes)"
+                          >
+                            <CreditCard size={18} />
+                          </button>
+                        )}
+                        {order.payment_status !== 'pending' && (
                           <button
                             onClick={() => handleMarkPaymentPending(order)}
                             className="p-1.5 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg transition-colors"
@@ -237,10 +280,15 @@ export default function Orders() {
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-600 dark:text-gray-400">Payment Status:</span>
-                    {selectedOrder.payment_received ? (
+                    {selectedOrder.payment_status === 'received' ? (
                       <span className="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium flex items-center gap-1">
                         <CheckCircle size={14} />
                         Received
+                      </span>
+                    ) : selectedOrder.payment_status === 'due' ? (
+                      <span className="px-3 py-1 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded-full text-xs font-medium flex items-center gap-1">
+                        <AlertCircle size={14} />
+                        Due
                       </span>
                     ) : (
                       <span className="px-3 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-full text-xs font-medium flex items-center gap-1">
@@ -260,25 +308,38 @@ export default function Orders() {
                       })}
                     </p>
                   )}
-                  <div className="flex gap-2 mt-4">
-                    {!selectedOrder.payment_received ? (
+                  <div className="flex flex-col gap-2 mt-4">
+                    {selectedOrder.payment_status !== 'received' && (
                       <button
                         onClick={() => {
                           handleMarkPaymentReceived(selectedOrder)
                           setSelectedOrder(null)
                         }}
-                        className="flex-1 btn-primary flex items-center justify-center gap-2"
+                        className="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2"
                       >
                         <CheckCircle size={18} />
-                        <span>Mark Payment Received</span>
+                        <span>Mark Payment Received (Online)</span>
                       </button>
-                    ) : (
+                    )}
+                    {selectedOrder.payment_status !== 'due' && (
+                      <button
+                        onClick={() => {
+                          handleMarkPaymentDue(selectedOrder)
+                          setSelectedOrder(null)
+                        }}
+                        className="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2"
+                      >
+                        <CreditCard size={18} />
+                        <span>Mark Payment Due (Customer Owes)</span>
+                      </button>
+                    )}
+                    {selectedOrder.payment_status !== 'pending' && (
                       <button
                         onClick={() => {
                           handleMarkPaymentPending(selectedOrder)
                           setSelectedOrder(null)
                         }}
-                        className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2"
+                        className="w-full bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2"
                       >
                         <XCircle size={18} />
                         <span>Mark Payment Pending</span>
