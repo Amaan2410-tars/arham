@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Plus, Minus, Trash2, Camera, X, Save } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { BrowserMultiFormatReader } from '@zxing/library'
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library'
 import confetti from 'canvas-confetti'
 import { generateInvoicePDF } from '../../utils/invoice'
 
@@ -57,7 +57,25 @@ export default function POS() {
         return
       }
 
-      codeReader.current = new BrowserMultiFormatReader()
+      // Configure scanner with barcode format hints for better detection
+      const hints = new Map()
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.UPC_A,
+        BarcodeFormat.UPC_E,
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39,
+        BarcodeFormat.CODE_93,
+        BarcodeFormat.ITF,
+        BarcodeFormat.CODABAR,
+        BarcodeFormat.QR_CODE,
+        BarcodeFormat.DATA_MATRIX
+      ])
+      hints.set(DecodeHintType.TRY_HARDER, true)
+      hints.set(DecodeHintType.ASSUME_GS1, false)
+      
+      codeReader.current = new BrowserMultiFormatReader(hints)
       
       // Get available cameras
       const devices = await codeReader.current.listVideoInputDevices()
@@ -78,11 +96,13 @@ export default function POS() {
 
       console.log('Starting scanner with device:', deviceId)
 
-      // Get the video stream and set it to video element
+      // Get the video stream with better quality settings for barcode scanning
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           deviceId: { exact: deviceId },
-          facingMode: 'environment'
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         }
       })
 
@@ -115,7 +135,13 @@ export default function POS() {
           
           if (error) {
             // NotFoundError is normal - it means no barcode found yet, keep scanning
-            if (error.name !== 'NotFoundException') {
+            if (error.name === 'NotFoundException') {
+              // This is expected - no barcode detected yet, keep scanning
+              return
+            }
+            
+            // Log other errors but don't stop scanning
+            if (error.message && !error.message.includes('No MultiFormat Readers')) {
               console.warn('Scan error:', error.name, error.message)
             }
           }
@@ -149,11 +175,27 @@ export default function POS() {
   }
 
   const handleBarcodeScanned = (barcode: string) => {
+    console.log('Processing barcode:', barcode)
     const product = products.find(p => p.barcode === barcode)
     if (product) {
       addToCart(product)
+      // Clear search query after successful scan
+      setSearchQuery('')
     } else {
-      alert('Product not found')
+      alert(`Product with barcode "${barcode}" not found. Please add it to inventory first.`)
+      // Optionally, you could set the search query to help user find/add the product
+      setSearchQuery(barcode)
+    }
+  }
+
+  // Handle manual barcode entry in search field (when user presses Enter)
+  const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      const trimmedQuery = searchQuery.trim()
+      // Check if it looks like a barcode (numeric or alphanumeric)
+      if (/^[0-9A-Za-z-]+$/.test(trimmedQuery) && trimmedQuery.length >= 3) {
+        handleBarcodeScanned(trimmedQuery)
+      }
     }
   }
 
@@ -287,9 +329,10 @@ export default function POS() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                   <input
                     type="text"
-                    placeholder="Search or scan barcode..."
+                    placeholder="Search or scan barcode... (Press Enter to search)"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyPress={handleSearchKeyPress}
                     className="w-full pl-10 pr-4 py-2.5 sm:py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm sm:text-base"
                   />
                 </div>
@@ -339,9 +382,12 @@ export default function POS() {
                   >
                     <X size={20} />
                   </button>
-                  <div className="absolute bottom-4 left-0 right-0 text-center">
+                  <div className="absolute bottom-4 left-0 right-0 text-center space-y-2">
                     <p className="bg-black/70 text-white px-4 py-2 rounded-lg text-sm">
-                      Point camera at barcode - Keep steady
+                      Point camera at barcode - Keep steady and well-lit
+                    </p>
+                    <p className="bg-black/50 text-white/80 px-3 py-1 rounded text-xs">
+                      Supported: EAN, UPC, Code128, Code39, QR Code
                     </p>
                   </div>
                 </div>

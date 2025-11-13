@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Edit, Trash2, Download, Search, Camera, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { BrowserMultiFormatReader } from '@zxing/library'
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library'
 
 interface Product {
   id: string
@@ -155,7 +155,25 @@ export default function Inventory() {
         return
       }
 
-      codeReader.current = new BrowserMultiFormatReader()
+      // Configure scanner with barcode format hints for better detection
+      const hints = new Map()
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.UPC_A,
+        BarcodeFormat.UPC_E,
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39,
+        BarcodeFormat.CODE_93,
+        BarcodeFormat.ITF,
+        BarcodeFormat.CODABAR,
+        BarcodeFormat.QR_CODE,
+        BarcodeFormat.DATA_MATRIX
+      ])
+      hints.set(DecodeHintType.TRY_HARDER, true)
+      hints.set(DecodeHintType.ASSUME_GS1, false)
+      
+      codeReader.current = new BrowserMultiFormatReader(hints)
       const devices = await codeReader.current.listVideoInputDevices()
       
       if (devices.length === 0) {
@@ -173,11 +191,13 @@ export default function Inventory() {
 
       console.log('Starting barcode scanner with device:', deviceId)
 
-      // Get the video stream and set it to video element
+      // Get the video stream with better quality settings for barcode scanning
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           deviceId: { exact: deviceId },
-          facingMode: 'environment'
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         }
       })
 
@@ -209,7 +229,13 @@ export default function Inventory() {
           
           if (error) {
             // NotFoundError is normal - it means no barcode found yet, keep scanning
-            if (error.name !== 'NotFoundException') {
+            if (error.name === 'NotFoundException') {
+              // This is expected - no barcode detected yet, keep scanning
+              return
+            }
+            
+            // Log other errors but don't stop scanning
+            if (error.message && !error.message.includes('No MultiFormat Readers')) {
               console.warn('Scan error:', error.name, error.message)
             }
           }
@@ -498,9 +524,12 @@ export default function Inventory() {
                       >
                         <X size={18} />
                       </button>
-                      <div className="absolute bottom-2 left-0 right-0 text-center">
+                      <div className="absolute bottom-2 left-0 right-0 text-center space-y-1">
                         <p className="bg-black/70 text-white px-3 py-1 rounded-lg text-xs">
-                          Point camera at barcode - Keep steady
+                          Point camera at barcode - Keep steady and well-lit
+                        </p>
+                        <p className="bg-black/50 text-white/80 px-2 py-0.5 rounded text-xs">
+                          EAN, UPC, Code128, Code39, QR
                         </p>
                       </div>
                     </div>
