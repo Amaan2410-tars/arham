@@ -36,19 +36,31 @@ export default function AdminDashboard() {
 
   const fetchStats = async () => {
     try {
-      // Total Sales
-      const { data: salesData } = await supabase
-        .from('orders')
-        .select('total')
-      const totalSales = salesData?.reduce((sum, order) => sum + (order.total || 0), 0) || 0
+      // Total Sales - include both orders and POS sales
+      const [ordersData, posSalesData] = await Promise.all([
+        supabase.from('orders').select('total'),
+        supabase.from('pos_sales').select('total')
+      ])
+      
+      const ordersTotal = ordersData.data?.reduce((sum, order) => sum + (order.total || 0), 0) || 0
+      const posSalesTotal = posSalesData.data?.reduce((sum, sale) => sum + (sale.total || 0), 0) || 0
+      const totalSales = ordersTotal + posSalesTotal
 
-      // Orders Today
+      // Orders Today - include both orders and POS sales
       const today = new Date()
       today.setHours(0, 0, 0, 0)
-      const { count: ordersCount } = await supabase
-        .from('orders')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', today.toISOString())
+      const [ordersCount, posSalesCount] = await Promise.all([
+        supabase
+          .from('orders')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', today.toISOString()),
+        supabase
+          .from('pos_sales')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', today.toISOString())
+      ])
+      
+      const ordersToday = (ordersCount.count || 0) + (posSalesCount.count || 0)
 
       // Low Stock
       const { data: products } = await supabase
@@ -58,7 +70,7 @@ export default function AdminDashboard() {
 
       setStats({
         totalSales,
-        ordersToday: ordersCount || 0,
+        ordersToday,
         lowStockCount,
       })
     } catch (error) {

@@ -22,24 +22,50 @@ export default function Reports() {
 
   const generateReport = async () => {
     try {
-      const { data: orders, error } = await supabase
-        .from('orders')
-        .select('*')
-        .gte('created_at', startDate)
-        .lte('created_at', endDate + 'T23:59:59')
-        .order('created_at', { ascending: false })
+      // Fetch both orders and POS sales
+      const [ordersResult, posSalesResult] = await Promise.all([
+        supabase
+          .from('orders')
+          .select('*')
+          .gte('created_at', startDate)
+          .lte('created_at', endDate + 'T23:59:59')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('pos_sales')
+          .select('*')
+          .gte('created_at', startDate)
+          .lte('created_at', endDate + 'T23:59:59')
+          .order('created_at', { ascending: false })
+      ])
 
-      if (error) throw error
+      if (ordersResult.error) throw ordersResult.error
+      if (posSalesResult.error) throw posSalesResult.error
 
-      const totalSales = orders?.reduce((sum, order) => sum + (order.total || 0), 0) || 0
-      const totalOrders = orders?.length || 0
+      const orders = ordersResult.data || []
+      const posSales = posSalesResult.data || []
+
+      // Combine sales data
+      const allSales = [
+        ...orders.map((o: any) => ({ ...o, type: 'Online', payment_mode: o.payment_mode || 'COD' })),
+        ...posSales.map((p: any) => ({ ...p, type: 'POS', payment_mode: 'Cash' }))
+      ]
+
+      const totalSales = allSales.reduce((sum, sale) => sum + (sale.total || 0), 0)
+      const totalOrders = allSales.length
       const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0
 
       // Group by payment mode
       const paymentBreakdown: Record<string, number> = {}
-      orders?.forEach(order => {
-        const mode = order.payment_mode || 'Unknown'
+      allSales.forEach(sale => {
+        const mode = sale.payment_mode || 'Unknown'
         paymentBreakdown[mode] = (paymentBreakdown[mode] || 0) + 1
+      })
+
+      // Group by type (Online vs POS)
+      const typeBreakdown: Record<string, number> = {}
+      allSales.forEach(sale => {
+        const type = sale.type || 'Unknown'
+        typeBreakdown[type] = (typeBreakdown[type] || 0) + 1
       })
 
       setReportData({
@@ -47,10 +73,12 @@ export default function Reports() {
         totalOrders,
         avgOrderValue,
         paymentBreakdown,
-        orders: orders || [],
+        typeBreakdown,
+        orders: allSales,
       })
     } catch (error) {
       console.error('Error generating report:', error)
+      alert('Error generating report. Please try again.')
     }
   }
 
@@ -58,14 +86,15 @@ export default function Reports() {
     if (!reportData) return
 
     const csv = [
-      ['Order ID', 'Customer', 'Phone', 'Total', 'Payment Mode', 'Date'].join(','),
-      ...reportData.orders.map((order: any) => [
-        order.id,
-        order.customer_name,
-        order.phone,
-        order.total,
-        order.payment_mode,
-        new Date(order.created_at).toLocaleDateString()
+      ['Type', 'Sale ID', 'Customer', 'Phone', 'Total', 'Payment Mode', 'Date'].join(','),
+      ...reportData.orders.map((sale: any) => [
+        sale.type || 'Online',
+        sale.id.substring(0, 8),
+        sale.customer_name,
+        sale.phone || 'N/A',
+        sale.total,
+        sale.payment_mode || 'Cash',
+        new Date(sale.created_at).toLocaleDateString()
       ].join(','))
     ].join('\n')
 
@@ -137,17 +166,30 @@ export default function Reports() {
       )}
 
       {reportData && (
-        <div className="card">
-          <h2 className="text-2xl font-bold mb-6">Payment Mode Breakdown</h2>
-          <div className="space-y-2">
-            {Object.entries(reportData.paymentBreakdown).map(([mode, count]: [string, any]) => (
-              <div key={mode} className="flex justify-between items-center p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                <span className="font-medium">{mode}</span>
-                <span className="text-primary font-bold">{count} orders</span>
-              </div>
-            ))}
+        <>
+          <div className="card mb-6">
+            <h2 className="text-2xl font-bold mb-6">Sales Type Breakdown</h2>
+            <div className="space-y-2">
+              {Object.entries(reportData.typeBreakdown || {}).map(([type, count]: [string, any]) => (
+                <div key={type} className="flex justify-between items-center p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                  <span className="font-medium">{type}</span>
+                  <span className="text-primary font-bold">{count} sales</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+          <div className="card">
+            <h2 className="text-2xl font-bold mb-6">Payment Mode Breakdown</h2>
+            <div className="space-y-2">
+              {Object.entries(reportData.paymentBreakdown).map(([mode, count]: [string, any]) => (
+                <div key={mode} className="flex justify-between items-center p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                  <span className="font-medium">{mode}</span>
+                  <span className="text-primary font-bold">{count} orders</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

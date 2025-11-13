@@ -20,6 +20,8 @@ export default function POS() {
   const [searchQuery, setSearchQuery] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [showScanner, setShowScanner] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [processing, setProcessing] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const codeReader = useRef<BrowserMultiFormatReader | null>(null)
 
@@ -34,13 +36,27 @@ export default function POS() {
 
   const fetchProducts = async () => {
     try {
-      const { data } = await supabase
+      setLoading(true)
+      const { data, error } = await supabase
         .from('products')
         .select('*')
         .order('name')
-      if (data) setProducts(data)
+      
+      if (error) {
+        console.error('Error fetching products:', error)
+        alert('Error loading products. Please refresh the page.')
+        return
+      }
+      
+      if (data) {
+        setProducts(data)
+        console.log(`Loaded ${data.length} products`)
+      }
     } catch (error) {
       console.error('Error fetching products:', error)
+      alert('Error loading products. Please refresh the page.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -235,7 +251,20 @@ export default function POS() {
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
-      alert('Cart is empty')
+      alert('Cart is empty. Please add products to cart.')
+      return
+    }
+
+    // Prevent double submission
+    if (processing) {
+      console.log('Checkout already in progress...')
+      return
+    }
+
+    // Validate stock before checkout
+    const outOfStockItems = cart.filter(item => item.quantity > item.stock)
+    if (outOfStockItems.length > 0) {
+      alert(`Some items are out of stock:\n${outOfStockItems.map(i => `- ${i.name}`).join('\n')}\n\nPlease adjust quantities.`)
       return
     }
 
@@ -243,8 +272,17 @@ export default function POS() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       alert('You must be logged in to process sales. Please log in again.')
+      window.location.href = '/admin/login'
       return
     }
+
+    // Confirm before checkout
+    const confirmMessage = `Complete sale for ${customerName || 'Walk-in Customer'}?\n\nTotal: ₹${total.toFixed(2)}\nItems: ${cart.length}`
+    if (!confirm(confirmMessage)) {
+      return
+    }
+
+    setProcessing(true)
 
     try {
       console.log('Starting checkout process...')
@@ -364,12 +402,18 @@ export default function POS() {
         origin: { y: 0.6 },
       })
 
+      // Refresh products to show updated stock
+      await fetchProducts()
+
       // Clear cart
       setCart([])
       setCustomerName('')
-      fetchProducts()
+      setSearchQuery('')
 
-      alert(`Sale completed successfully!\n\nSale ID: ${saleData.id}\nInvoice: ${invoiceNo}`)
+      // Show success message
+      const successMessage = `✅ Sale Completed Successfully!\n\nSale ID: ${saleData.id.substring(0, 8)}...\nInvoice: ${invoiceNo}\nTotal: ₹${total.toFixed(2)}\n\nThank you for your business!`
+      alert(successMessage)
+      
       console.log('Checkout completed successfully')
     } catch (error: any) {
       console.error('Checkout error:', error)
@@ -382,7 +426,9 @@ export default function POS() {
         errorMessage = 'Permission denied. Make sure you are logged in as an admin user.\n\nCheck your Supabase RLS policies.'
       }
       
-      alert(`${errorMessage}\n\nCheck browser console (F12) for more details.`)
+      alert(`❌ ${errorMessage}\n\nCheck browser console (F12) for more details.`)
+    } finally {
+      setProcessing(false)
     }
   }
 
@@ -469,24 +515,35 @@ export default function POS() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 max-h-[60vh] overflow-y-auto scrollbar-hide">
-                {filteredProducts.map((product) => (
-                  <motion.button
-                    key={product.id}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => addToCart(product)}
-                    disabled={product.stock === 0}
-                    className="p-3 sm:p-4 bg-gray-100 dark:bg-gray-800 rounded-xl text-left hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
-                  >
-                    <h3 className="font-semibold mb-1 text-xs sm:text-sm truncate">{product.name}</h3>
-                    <p className="text-primary font-bold text-sm sm:text-base">₹{product.price}</p>
-                    <p className="text-xs text-gray-500">
-                      Stock: {product.stock}
-                    </p>
-                  </motion.button>
-                ))}
-              </div>
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                </div>
+              ) : filteredProducts.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <p className="text-lg mb-2">No products found</p>
+                  <p className="text-sm">Try a different search term or add products in Inventory</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 max-h-[60vh] overflow-y-auto scrollbar-hide">
+                  {filteredProducts.map((product) => (
+                    <motion.button
+                      key={product.id}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => addToCart(product)}
+                      disabled={product.stock === 0}
+                      className="p-3 sm:p-4 bg-gray-100 dark:bg-gray-800 rounded-xl text-left hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation transition-all"
+                    >
+                      <h3 className="font-semibold mb-1 text-xs sm:text-sm truncate">{product.name}</h3>
+                      <p className="text-primary font-bold text-sm sm:text-base">₹{product.price}</p>
+                      <p className={`text-xs ${product.stock === 0 ? 'text-red-500' : product.stock < 10 ? 'text-orange-500' : 'text-gray-500'}`}>
+                        Stock: {product.stock}
+                      </p>
+                    </motion.button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -571,11 +628,20 @@ export default function POS() {
 
               <button
                 onClick={handleCheckout}
-                disabled={cart.length === 0}
-                className="btn-primary w-full flex items-center justify-center space-x-2 disabled:opacity-50 text-sm sm:text-base"
+                disabled={cart.length === 0 || processing}
+                className="btn-primary w-full flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base min-h-[48px]"
               >
-                <Save size={18} />
-                <span>Complete Sale</span>
+                {processing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} />
+                    <span>Complete Sale (₹{total.toFixed(2)})</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
