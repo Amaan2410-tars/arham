@@ -548,6 +548,67 @@ export default function POS() {
                 />
               </div>
 
+              {/* Payment Status Selection */}
+              <div className="mb-3 sm:mb-4">
+                <label className="block font-medium mb-1.5 sm:mb-2 text-sm sm:text-base">Payment Status *</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('received')}
+                    className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors ${
+                      paymentStatus === 'received'
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    Online
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('offline')}
+                    className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors ${
+                      paymentStatus === 'offline'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    Offline
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('due')}
+                    className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors ${
+                      paymentStatus === 'due'
+                        ? 'bg-red-500 text-white'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    Due
+                  </button>
+                </div>
+              </div>
+
+              {/* GST Toggle */}
+              <div className="mb-3 sm:mb-4 flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                <div>
+                  <label className="block font-medium text-sm sm:text-base">Include GST (18%)</label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Add 18% GST to subtotal</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIncludeGST(!includeGST)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    includeGST ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      includeGST ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
               <div className="space-y-2 mb-3 sm:mb-4 max-h-[40vh] overflow-y-auto scrollbar-hide">
                 <AnimatePresence>
                   {cart.map((item) => (
@@ -600,10 +661,12 @@ export default function POS() {
                     <span>Subtotal</span>
                     <span>₹{subtotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>GST (18%)</span>
-                    <span>₹{gst.toFixed(2)}</span>
-                  </div>
+                  {includeGST && (
+                    <div className="flex justify-between">
+                      <span>GST (18%)</span>
+                      <span>₹{gst.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-lg sm:text-xl font-bold pt-2 border-t">
                     <span>Total</span>
                     <span className="text-primary">₹{total.toFixed(2)}</span>
