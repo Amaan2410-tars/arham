@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Plus, Edit, Trash2, Download, Search } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Plus, Edit, Trash2, Download, Search, Camera, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { BrowserMultiFormatReader } from '@zxing/library'
 
 interface Product {
   id: string
@@ -20,6 +21,9 @@ export default function Inventory() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const codeReader = useRef<BrowserMultiFormatReader | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -32,6 +36,11 @@ export default function Inventory() {
 
   useEffect(() => {
     fetchProducts()
+    return () => {
+      if (codeReader.current) {
+        codeReader.current.reset()
+      }
+    }
   }, [])
 
   const fetchProducts = async () => {
@@ -133,6 +142,70 @@ export default function Inventory() {
     a.click()
   }
 
+  const startBarcodeScanning = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      stream.getTracks().forEach(track => track.stop())
+      
+      setShowBarcodeScanner(true)
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      if (!videoRef.current) {
+        alert('Video element not ready')
+        setShowBarcodeScanner(false)
+        return
+      }
+
+      codeReader.current = new BrowserMultiFormatReader()
+      const devices = await codeReader.current.listVideoInputDevices()
+      
+      if (devices.length === 0) {
+        alert('No camera found. Please ensure your device has a camera and grant camera permissions.')
+        setShowBarcodeScanner(false)
+        return
+      }
+
+      const backCamera = devices.find(device => 
+        device.label.toLowerCase().includes('back') || 
+        device.label.toLowerCase().includes('rear')
+      )
+      const deviceId = backCamera?.deviceId || devices[0].deviceId
+
+      await codeReader.current.decodeFromVideoDevice(
+        deviceId,
+        videoRef.current,
+        (result, error) => {
+          if (result) {
+            const barcode = result.getText()
+            console.log('Barcode scanned:', barcode)
+            setFormData({ ...formData, barcode })
+            stopBarcodeScanning()
+          }
+          if (error && error.name !== 'NotFoundException') {
+            console.error('Scan error:', error)
+          }
+        }
+      )
+    } catch (error: any) {
+      console.error('Error starting scanner:', error)
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        alert('Camera permission denied. Please allow camera access in your browser settings.')
+      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        alert('No camera found. Please ensure your device has a camera.')
+      } else {
+        alert('Error accessing camera: ' + (error.message || 'Unknown error'))
+      }
+      setShowBarcodeScanner(false)
+    }
+  }
+
+  const stopBarcodeScanning = () => {
+    if (codeReader.current) {
+      codeReader.current.reset()
+    }
+    setShowBarcodeScanner(false)
+  }
+
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.category.toLowerCase().includes(searchQuery.toLowerCase())
@@ -140,11 +213,11 @@ export default function Inventory() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold">Inventory Management</h1>
-        <div className="flex space-x-4">
-          <button onClick={handleExport} className="btn-secondary flex items-center space-x-2">
-            <Download size={20} />
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 sm:mb-6 lg:mb-8">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">Inventory Management</h1>
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
+          <button onClick={handleExport} className="btn-secondary flex items-center justify-center space-x-2 text-sm sm:text-base">
+            <Download size={18} />
             <span>Export CSV</span>
           </button>
           <button
@@ -153,23 +226,23 @@ export default function Inventory() {
               resetForm()
               setShowModal(true)
             }}
-            className="btn-primary flex items-center space-x-2"
+            className="btn-primary flex items-center justify-center space-x-2 text-sm sm:text-base"
           >
-            <Plus size={20} />
+            <Plus size={18} />
             <span>Add Product</span>
           </button>
         </div>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-4 sm:mb-6">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
             placeholder="Search products..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+            className="w-full pl-10 pr-4 py-2.5 sm:py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm sm:text-base"
           />
         </div>
       </div>
@@ -179,51 +252,104 @@ export default function Inventory() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
         </div>
       ) : (
-        <div className="card overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100 dark:bg-gray-800">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Category</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Price</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Stock</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Barcode</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredProducts.map((product) => (
-                  <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td className="px-6 py-4 whitespace-nowrap font-medium">{product.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{product.category}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">₹{product.price}</td>
-                    <td className={`px-6 py-4 whitespace-nowrap ${product.stock < 10 ? 'text-red-600 font-bold' : ''}`}>
+        <>
+          {/* Mobile Card View */}
+          <div className="block md:hidden space-y-3">
+            {filteredProducts.map((product) => (
+              <div key={product.id} className="card">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-base truncate">{product.name}</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{product.category}</p>
+                  </div>
+                  <div className="flex space-x-2 ml-2">
+                    <button
+                      onClick={() => handleEdit(product)}
+                      className="text-blue-600 hover:text-blue-800 p-1 touch-manipulation"
+                      aria-label="Edit"
+                    >
+                      <Edit size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(product.id)}
+                      className="text-red-600 hover:text-red-800 p-1 touch-manipulation"
+                      aria-label="Delete"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">Price:</span>
+                    <span className="font-semibold ml-1">₹{product.price}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">Stock:</span>
+                    <span className={`font-semibold ml-1 ${product.stock < 10 ? 'text-red-600' : ''}`}>
                       {product.stock}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{product.barcode || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleEdit(product)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          <Edit size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.id)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </span>
+                  </div>
+                  {product.barcode && (
+                    <div className="col-span-2">
+                      <span className="text-gray-600 dark:text-gray-400">Barcode:</span>
+                      <span className="ml-1">{product.barcode}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block card overflow-hidden p-0">
+            <div className="overflow-x-auto scrollbar-hide">
+              <table className="w-full">
+                <thead className="bg-gray-100 dark:bg-gray-800">
+                  <tr>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Name</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Category</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Price</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Stock</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase hidden lg:table-cell">Barcode</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {filteredProducts.map((product) => (
+                    <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <td className="px-4 lg:px-6 py-4 font-medium text-sm">{product.name}</td>
+                      <td className="px-4 lg:px-6 py-4 text-sm">{product.category}</td>
+                      <td className="px-4 lg:px-6 py-4 text-sm">₹{product.price}</td>
+                      <td className={`px-4 lg:px-6 py-4 text-sm ${product.stock < 10 ? 'text-red-600 font-bold' : ''}`}>
+                        {product.stock}
+                      </td>
+                      <td className="px-4 lg:px-6 py-4 text-sm hidden lg:table-cell">{product.barcode || '-'}</td>
+                      <td className="px-4 lg:px-6 py-4">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleEdit(product)}
+                            className="text-blue-600 hover:text-blue-800 touch-manipulation"
+                            aria-label="Edit"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(product.id)}
+                            className="text-red-600 hover:text-red-800 touch-manipulation"
+                            aria-label="Delete"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Modal */}
@@ -232,62 +358,107 @@ export default function Inventory() {
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="glass rounded-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            className="glass rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
           >
-            <h2 className="text-2xl font-bold mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">
               {editingProduct ? 'Edit Product' : 'Add Product'}
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <label className="block font-medium mb-2">Name *</label>
+                  <label className="block font-medium mb-1.5 sm:mb-2 text-sm sm:text-base">Name *</label>
                   <input
                     type="text"
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+                    className="w-full px-3 sm:px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm sm:text-base"
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-2">Category *</label>
+                  <label className="block font-medium mb-1.5 sm:mb-2 text-sm sm:text-base">Category *</label>
                   <input
                     type="text"
                     required
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+                    className="w-full px-3 sm:px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm sm:text-base"
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-2">Price *</label>
+                  <label className="block font-medium mb-1.5 sm:mb-2 text-sm sm:text-base">Price *</label>
                   <input
                     type="number"
                     step="0.01"
                     required
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    className="w-full px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+                    className="w-full px-3 sm:px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm sm:text-base"
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-2">Stock *</label>
+                  <label className="block font-medium mb-1.5 sm:mb-2 text-sm sm:text-base">Stock *</label>
                   <input
                     type="number"
                     required
                     value={formData.stock}
                     onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                    className="w-full px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+                    className="w-full px-3 sm:px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm sm:text-base"
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-2">Barcode</label>
-                  <input
-                    type="text"
-                    value={formData.barcode}
-                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                    className="w-full px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
-                  />
+                  <label className="block font-medium mb-1.5 sm:mb-2 text-sm sm:text-base">Barcode</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={formData.barcode}
+                      onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                      className="flex-1 px-3 sm:px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm sm:text-base"
+                      placeholder="Enter or scan barcode"
+                    />
+                    <button
+                      type="button"
+                      onClick={showBarcodeScanner ? stopBarcodeScanning : startBarcodeScanning}
+                      className={`px-3 sm:px-4 py-2 rounded-xl font-medium flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base touch-manipulation ${
+                        showBarcodeScanner
+                          ? 'bg-red-500 hover:bg-red-600 text-white'
+                          : 'bg-primary hover:bg-primary-dark text-white'
+                      }`}
+                      aria-label={showBarcodeScanner ? 'Stop scanning' : 'Scan barcode'}
+                    >
+                      <Camera size={18} />
+                      <span className="hidden sm:inline">{showBarcodeScanner ? 'Stop' : 'Scan'}</span>
+                    </button>
+                  </div>
+                  {showBarcodeScanner && (
+                    <div className="mt-3 relative bg-black rounded-xl overflow-hidden">
+                      <video
+                        ref={videoRef}
+                        className="w-full"
+                        style={{ maxHeight: '300px', objectFit: 'contain' }}
+                        autoPlay
+                        playsInline
+                        muted
+                      />
+                      <div className="absolute inset-0 pointer-events-none">
+                        <div className="absolute inset-0 border-2 border-primary rounded-xl" style={{
+                          boxShadow: 'inset 0 0 0 2px rgba(37, 99, 235, 0.5)'
+                        }} />
+                      </div>
+                      <button
+                        onClick={stopBarcodeScanning}
+                        className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full shadow-lg touch-manipulation z-10"
+                        aria-label="Stop scanning"
+                      >
+                        <X size={18} />
+                      </button>
+                      <div className="absolute bottom-2 left-0 right-0 text-center">
+                        <p className="bg-black/70 text-white px-3 py-1 rounded-lg text-xs">
+                          Point camera at barcode
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block font-medium mb-2">Image URL</label>
@@ -312,15 +483,16 @@ export default function Inventory() {
                 <button
                   type="button"
                   onClick={() => {
+                    stopBarcodeScanning()
                     setShowModal(false)
                     setEditingProduct(null)
                     resetForm()
                   }}
-                  className="btn-secondary"
+                  className="btn-secondary text-sm sm:text-base"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">
+                <button type="submit" className="btn-primary text-sm sm:text-base">
                   {editingProduct ? 'Update' : 'Add'} Product
                 </button>
               </div>
