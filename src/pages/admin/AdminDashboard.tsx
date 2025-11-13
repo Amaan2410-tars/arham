@@ -19,6 +19,8 @@ import Orders from './Orders'
 import Reports from './Reports'
 import POS from './POS'
 import Invoices from './Invoices'
+import Sales from './Sales'
+import Backorders from './Backorders'
 
 export default function AdminDashboard() {
   const location = useLocation()
@@ -86,8 +88,10 @@ export default function AdminDashboard() {
   const menuItems = [
     { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/admin/inventory', label: 'Inventory', icon: Package },
-    { path: '/admin/orders', label: 'Orders', icon: ShoppingCart },
     { path: '/admin/pos', label: 'POS System', icon: CreditCard },
+    { path: '/admin/sales', label: 'Sales', icon: ShoppingCart },
+    { path: '/admin/orders', label: 'Orders', icon: ShoppingCart },
+    { path: '/admin/backorders', label: 'Backorders', icon: AlertCircle },
     { path: '/admin/invoices', label: 'Invoices', icon: FileText },
     { path: '/admin/reports', label: 'Reports', icon: TrendingUp },
   ]
@@ -272,8 +276,10 @@ export default function AdminDashboard() {
             }
           />
           <Route path="inventory" element={<Inventory />} />
-          <Route path="orders" element={<Orders />} />
           <Route path="pos" element={<POS />} />
+          <Route path="sales" element={<Sales />} />
+          <Route path="orders" element={<Orders />} />
+          <Route path="backorders" element={<Backorders />} />
           <Route path="invoices" element={<Invoices />} />
           <Route path="reports" element={<Reports />} />
         </Routes>

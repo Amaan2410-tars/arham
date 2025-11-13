@@ -51,11 +51,48 @@ export default function Inventory() {
         .order('name')
       
       if (error) throw error
-      if (data) setProducts(data)
+      if (data) {
+        setProducts(data)
+        // Auto-create backorders for products with 0 stock
+        checkAndCreateBackorders(data)
+      }
     } catch (error) {
       console.error('Error fetching products:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const checkAndCreateBackorders = async (products: Product[]) => {
+    try {
+      const outOfStockProducts = products.filter(p => p.stock === 0)
+      
+      for (const product of outOfStockProducts) {
+        // Check if backorder already exists
+        const { data: existing } = await supabase
+          .from('backorders')
+          .select('*')
+          .eq('product_name', product.name)
+          .eq('status', 'pending')
+          .single()
+
+        if (!existing) {
+          // Auto-create backorder
+          await supabase.from('backorders').insert({
+            product_name: product.name,
+            category: product.category,
+            quantity_ordered: 10, // Default quantity
+            supplier: '',
+            expected_date: null,
+            status: 'pending',
+            notes: 'Auto-created: Product out of stock',
+          })
+          console.log(`Auto-created backorder for ${product.name}`)
+        }
+      }
+    } catch (error) {
+      console.error('Error checking backorders:', error)
+      // Don't show error to user - this is background process
     }
   }
 

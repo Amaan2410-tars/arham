@@ -17,7 +17,7 @@ interface InvoiceData {
   paymentMode: string
 }
 
-export async function generateInvoicePDF(data: InvoiceData): Promise<Blob> {
+export function generateInvoicePDF(data: InvoiceData): Blob {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
   const margin = 20

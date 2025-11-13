@@ -316,7 +316,7 @@ export default function POS() {
       
       try {
         console.log('Generating invoice PDF...')
-        invoicePdfBlob = await generateInvoicePDF({
+        invoicePdfBlob = generateInvoicePDF({
           invoiceNo,
           orderId: saleData.id,
           customerName: customerName || 'Walk-in Customer',
@@ -330,17 +330,22 @@ export default function POS() {
         })
         console.log('Invoice PDF generated successfully')
         
-        // Offer download instead of upload (avoids RLS policy issues)
-        if (invoicePdfBlob) {
-          const url = URL.createObjectURL(invoicePdfBlob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = `${invoiceNo}.pdf`
-          document.body.appendChild(a)
-          a.click()
-          document.body.removeChild(a)
-          URL.revokeObjectURL(url)
-          console.log('Invoice PDF download initiated')
+        // Download invoice PDF immediately
+        if (invoicePdfBlob && invoicePdfBlob.size > 0) {
+          setTimeout(() => {
+            const url = URL.createObjectURL(invoicePdfBlob!)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `${invoiceNo}.pdf`
+            a.style.display = 'none'
+            document.body.appendChild(a)
+            a.click()
+            setTimeout(() => {
+              document.body.removeChild(a)
+              URL.revokeObjectURL(url)
+            }, 100)
+            console.log('Invoice PDF download initiated')
+          }, 500) // Small delay to ensure sale is processed first
         }
       } catch (pdfError) {
         console.error('Error generating PDF:', pdfError)
