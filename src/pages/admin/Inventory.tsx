@@ -61,33 +61,80 @@ export default function Inventory() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validation
+    if (!formData.name.trim()) {
+      alert('Please enter a product name')
+      return
+    }
+    if (!formData.category.trim()) {
+      alert('Please enter a category')
+      return
+    }
+    if (!formData.price || parseFloat(formData.price) <= 0) {
+      alert('Please enter a valid price')
+      return
+    }
+    if (!formData.stock || parseInt(formData.stock) < 0) {
+      alert('Please enter a valid stock quantity')
+      return
+    }
+
     try {
       const productData = {
-        name: formData.name,
-        category: formData.category,
+        name: formData.name.trim(),
+        category: formData.category.trim(),
         price: parseFloat(formData.price),
         stock: parseInt(formData.stock),
-        barcode: formData.barcode || null,
-        description: formData.description || null,
-        image_url: formData.image_url || null,
+        barcode: formData.barcode.trim() || null,
+        description: formData.description.trim() || null,
+        image_url: formData.image_url.trim() || null,
       }
 
+      let error, data
+
       if (editingProduct) {
-        await supabase
+        const result = await supabase
           .from('products')
           .update(productData)
           .eq('id', editingProduct.id)
+          .select()
+        error = result.error
+        data = result.data
       } else {
-        await supabase.from('products').insert(productData)
+        const result = await supabase
+          .from('products')
+          .insert(productData)
+          .select()
+        error = result.error
+        data = result.data
+      }
+
+      if (error) {
+        console.error('Supabase error:', error)
+        alert(`Error saving product: ${error.message || 'Unknown error'}\n\nCheck console for details.`)
+        return
+      }
+
+      if (!data || (Array.isArray(data) && data.length === 0)) {
+        console.warn('No data returned from Supabase')
+        alert('Product saved but no confirmation received. Please refresh the page.')
       }
 
       setShowModal(false)
       setEditingProduct(null)
       resetForm()
       fetchProducts()
-    } catch (error) {
+      
+      // Show success message
+      if (editingProduct) {
+        alert('Product updated successfully!')
+      } else {
+        alert('Product added successfully!')
+      }
+    } catch (error: any) {
       console.error('Error saving product:', error)
-      alert('Error saving product')
+      alert(`Error saving product: ${error.message || 'Unknown error'}\n\nCheck browser console for details.`)
     }
   }
 
