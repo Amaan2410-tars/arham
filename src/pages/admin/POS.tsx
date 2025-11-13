@@ -300,6 +300,7 @@ export default function POS() {
       // Upload PDF (only if PDF was generated)
       // Note: For POS sales, we don't insert into invoices table (it references orders table)
       // We just upload the PDF for record keeping
+      // PDF upload is optional - sale will complete even if upload fails
       if (pdfBlob.size > 0) {
         try {
           // Use just the filename, not invoices/filename (bucket name is already specified)
@@ -315,7 +316,12 @@ export default function POS() {
 
           if (uploadError) {
             console.error('Error uploading PDF:', uploadError)
-            // Continue even if upload fails - sale is already saved
+            console.warn('PDF upload failed, but sale is still saved. To fix:')
+            console.warn('1. Go to Supabase Dashboard → Storage → invoices bucket')
+            console.warn('2. Go to Policies tab')
+            console.warn('3. Add policy: Allow authenticated users to INSERT objects')
+            console.warn('4. Policy: authenticated users can upload files')
+            // Continue - sale is already saved, PDF upload is optional
           } else {
             console.log('PDF uploaded successfully')
             // Get public URL for reference (optional)
@@ -324,8 +330,9 @@ export default function POS() {
               .getPublicUrl(fileName)
             console.log('Invoice PDF URL:', urlData.publicUrl)
           }
-        } catch (uploadErr) {
+        } catch (uploadErr: any) {
           console.error('Exception during PDF upload:', uploadErr)
+          console.warn('PDF upload failed, but sale is still saved.')
           // Continue - sale is already saved
         }
       }
