@@ -62,6 +62,14 @@ export default function Inventory() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Check authentication first
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      alert('You must be logged in to add products. Please log in again.')
+      window.location.href = '/admin/login'
+      return
+    }
+
     // Validation
     if (!formData.name.trim()) {
       alert('Please enter a product name')
@@ -112,13 +120,25 @@ export default function Inventory() {
 
       if (error) {
         console.error('Supabase error:', error)
-        alert(`Error saving product: ${error.message || 'Unknown error'}\n\nCheck console for details.`)
+        console.error('Error details:', JSON.stringify(error, null, 2))
+        
+        // More helpful error messages
+        let errorMessage = error.message || 'Unknown error'
+        if (error.code === 'PGRST116' || error.message?.includes('permission')) {
+          errorMessage = 'Permission denied. Make sure you are logged in as an admin user.\n\nIf you are logged in, check your Supabase RLS policies.'
+        } else if (error.message?.includes('violates')) {
+          errorMessage = `Database constraint error: ${error.message}\n\nCheck that all required fields are filled correctly.`
+        }
+        
+        alert(`Error saving product: ${errorMessage}\n\nCheck browser console (F12) for more details.`)
         return
       }
 
       if (!data || (Array.isArray(data) && data.length === 0)) {
         console.warn('No data returned from Supabase')
-        alert('Product saved but no confirmation received. Please refresh the page.')
+        alert('Product saved but no confirmation received. Please refresh the page to verify.')
+        fetchProducts() // Refresh anyway
+        return
       }
 
       setShowModal(false)
@@ -134,7 +154,7 @@ export default function Inventory() {
       }
     } catch (error: any) {
       console.error('Error saving product:', error)
-      alert(`Error saving product: ${error.message || 'Unknown error'}\n\nCheck browser console for details.`)
+      alert(`Error saving product: ${error.message || 'Unknown error'}\n\nCheck browser console (F12) for more details.`)
     }
   }
 

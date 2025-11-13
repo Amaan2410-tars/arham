@@ -1,4 +1,5 @@
-const CACHE_NAME = 'arham-stationary-v1'
+// Auto-increment version on each deployment to force cache clear
+const CACHE_NAME = 'arham-stationary-v' + new Date().getTime()
 const urlsToCache = [
   '/',
   '/products',
@@ -63,13 +64,16 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
+      // Delete ALL old caches to force fresh load
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName)
-          }
+          console.log('Deleting old cache:', cacheName)
+          return caches.delete(cacheName)
         })
       )
+    }).then(() => {
+      // Force claim all clients to use new service worker immediately
+      return self.clients.claim()
     })
   )
 })
