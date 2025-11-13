@@ -298,9 +298,12 @@ export default function POS() {
       }
 
       // Upload PDF (only if PDF was generated)
+      // Note: For POS sales, we don't insert into invoices table (it references orders table)
+      // We just upload the PDF for record keeping
       if (pdfBlob.size > 0) {
         try {
-          const fileName = `invoices/${invoiceNo}.pdf`
+          // Use just the filename, not invoices/filename (bucket name is already specified)
+          const fileName = `${invoiceNo}.pdf`
           console.log('Uploading invoice PDF to storage...')
           
           const { error: uploadError } = await supabase.storage
@@ -312,9 +315,14 @@ export default function POS() {
 
           if (uploadError) {
             console.error('Error uploading PDF:', uploadError)
-            // Continue even if upload fails
+            // Continue even if upload fails - sale is already saved
           } else {
             console.log('PDF uploaded successfully')
+            // Get public URL for reference (optional)
+            const { data: urlData } = supabase.storage
+              .from('invoices')
+              .getPublicUrl(fileName)
+            console.log('Invoice PDF URL:', urlData.publicUrl)
           }
         } catch (uploadErr) {
           console.error('Exception during PDF upload:', uploadErr)
