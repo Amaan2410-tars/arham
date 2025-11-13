@@ -19,6 +19,8 @@ export default function POS() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [customerName, setCustomerName] = useState('')
+  const [paymentStatus, setPaymentStatus] = useState<'received' | 'offline' | 'due'>('received')
+  const [includeGST, setIncludeGST] = useState(true)
   const [showScanner, setShowScanner] = useState(false)
   const [loading, setLoading] = useState(false)
   const [processing, setProcessing] = useState(false)
@@ -246,7 +248,7 @@ export default function POS() {
   }
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const gst = subtotal * 0.18
+  const gst = includeGST ? subtotal * 0.18 : 0
   const total = subtotal + gst
 
   const handleCheckout = async () => {
@@ -295,6 +297,9 @@ export default function POS() {
           customer_name: customerName || 'Walk-in Customer',
           items: cart,
           total: total,
+          payment_status: paymentStatus,
+          payment_received: paymentStatus === 'received',
+          payment_received_at: paymentStatus === 'received' ? new Date().toISOString() : null,
         })
         .select()
         .single()
@@ -326,7 +331,7 @@ export default function POS() {
           subtotal,
           gst,
           total,
-          paymentMode: 'Cash',
+          paymentMode: paymentStatus === 'received' ? 'Online' : paymentStatus === 'offline' ? 'Offline' : 'Due',
         })
         console.log('Invoice PDF generated successfully')
         
@@ -385,6 +390,8 @@ export default function POS() {
       // Clear cart
       setCart([])
       setCustomerName('')
+      setPaymentStatus('received')
+      setIncludeGST(true)
       setSearchQuery('')
 
       // Show success message

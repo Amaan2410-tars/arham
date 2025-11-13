@@ -104,9 +104,11 @@ export function generateInvoicePDF(data: InvoiceData): Blob {
   doc.text('Subtotal:', pageWidth - margin - 50, yPos, { align: 'right' })
   doc.text(`₹${data.subtotal.toFixed(2)}`, pageWidth - margin - 2, yPos, { align: 'right' })
   yPos += 7
-  doc.text('GST (18%):', pageWidth - margin - 50, yPos, { align: 'right' })
-  doc.text(`₹${data.gst.toFixed(2)}`, pageWidth - margin - 2, yPos, { align: 'right' })
-  yPos += 7
+  if (data.gst > 0) {
+    doc.text('GST (18%):', pageWidth - margin - 50, yPos, { align: 'right' })
+    doc.text(`₹${data.gst.toFixed(2)}`, pageWidth - margin - 2, yPos, { align: 'right' })
+    yPos += 7
+  }
   doc.setFontSize(12)
   doc.text('Total:', pageWidth - margin - 50, yPos, { align: 'right' })
   doc.text(`₹${data.total.toFixed(2)}`, pageWidth - margin - 2, yPos, { align: 'right' })
