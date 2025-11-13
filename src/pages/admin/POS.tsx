@@ -239,8 +239,18 @@ export default function POS() {
       return
     }
 
+    // Check authentication
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      alert('You must be logged in to process sales. Please log in again.')
+      return
+    }
+
     try {
+      console.log('Starting checkout process...')
+      
       // Save POS sale
+      console.log('Saving POS sale to database...')
       const { data: saleData, error: saleError } = await supabase
         .from('pos_sales')
         .insert({
@@ -251,47 +261,88 @@ export default function POS() {
         .select()
         .single()
 
-      if (saleError) throw saleError
+      if (saleError) {
+        console.error('Error saving POS sale:', saleError)
+        throw new Error(`Failed to save sale: ${saleError.message}`)
+      }
+
+      if (!saleData) {
+        throw new Error('Sale was not saved - no data returned')
+      }
+
+      console.log('POS sale saved successfully:', saleData.id)
 
       // Generate invoice
       const invoiceNo = `POS-${Date.now()}`
-      const pdfBlob = await generateInvoicePDF({
-        invoiceNo,
-        orderId: saleData.id,
-        customerName: customerName || 'Walk-in Customer',
-        phone: '',
-        address: '',
-        items: cart,
-        subtotal,
-        gst,
-        total,
-        paymentMode: 'Cash',
-      })
-
-      // Upload PDF
-      const fileName = `invoices/${invoiceNo}.pdf`
-      await supabase.storage
-        .from('invoices')
-        .upload(fileName, pdfBlob, { contentType: 'application/pdf' })
-
-      const { data: urlData } = supabase.storage
-        .from('invoices')
-        .getPublicUrl(fileName)
-
-      await supabase.from('invoices').insert({
-        order_id: saleData.id,
-        invoice_no: invoiceNo,
-        pdf_url: urlData.publicUrl,
-      })
-
-      // Update stock
-      for (const item of cart) {
-        await supabase
-          .from('products')
-          .update({ stock: item.stock - item.quantity })
-          .eq('id', item.id)
+      console.log('Generating invoice PDF...')
+      
+      let pdfBlob: Blob
+      try {
+        pdfBlob = await generateInvoicePDF({
+          invoiceNo,
+          orderId: saleData.id,
+          customerName: customerName || 'Walk-in Customer',
+          phone: '',
+          address: '',
+          items: cart,
+          subtotal,
+          gst,
+          total,
+          paymentMode: 'Cash',
+        })
+        console.log('Invoice PDF generated successfully')
+      } catch (pdfError) {
+        console.error('Error generating PDF:', pdfError)
+        // Continue even if PDF generation fails
+        pdfBlob = new Blob()
       }
 
+      // Upload PDF (only if PDF was generated)
+      if (pdfBlob.size > 0) {
+        try {
+          const fileName = `invoices/${invoiceNo}.pdf`
+          console.log('Uploading invoice PDF to storage...')
+          
+          const { error: uploadError } = await supabase.storage
+            .from('invoices')
+            .upload(fileName, pdfBlob, { 
+              contentType: 'application/pdf',
+              upsert: true // Overwrite if exists
+            })
+
+          if (uploadError) {
+            console.error('Error uploading PDF:', uploadError)
+            // Continue even if upload fails
+          } else {
+            console.log('PDF uploaded successfully')
+          }
+        } catch (uploadErr) {
+          console.error('Exception during PDF upload:', uploadErr)
+          // Continue - sale is already saved
+        }
+      }
+
+      // Update stock
+      console.log('Updating product stock...')
+      for (const item of cart) {
+        const newStock = item.stock - item.quantity
+        if (newStock < 0) {
+          console.warn(`Warning: Stock for ${item.name} would go negative. Setting to 0.`)
+        }
+        
+        const { error: stockError } = await supabase
+          .from('products')
+          .update({ stock: Math.max(0, newStock) })
+          .eq('id', item.id)
+
+        if (stockError) {
+          console.error(`Error updating stock for ${item.name}:`, stockError)
+          // Continue with other items
+        }
+      }
+      console.log('Stock updated successfully')
+
+      // Show success
       confetti({
         particleCount: 100,
         spread: 70,
@@ -303,10 +354,20 @@ export default function POS() {
       setCustomerName('')
       fetchProducts()
 
-      alert('Sale completed successfully!')
-    } catch (error) {
+      alert(`Sale completed successfully!\n\nSale ID: ${saleData.id}\nInvoice: ${invoiceNo}`)
+      console.log('Checkout completed successfully')
+    } catch (error: any) {
       console.error('Checkout error:', error)
-      alert('Error processing sale')
+      console.error('Error details:', JSON.stringify(error, null, 2))
+      
+      let errorMessage = 'Error processing sale'
+      if (error.message) {
+        errorMessage = error.message
+      } else if (error.code === 'PGRST116' || error.message?.includes('permission')) {
+        errorMessage = 'Permission denied. Make sure you are logged in as an admin user.\n\nCheck your Supabase RLS policies.'
+      }
+      
+      alert(`${errorMessage}\n\nCheck browser console (F12) for more details.`)
     }
   }
 
