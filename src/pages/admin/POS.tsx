@@ -310,13 +310,13 @@ export default function POS() {
 
       console.log('POS sale saved successfully:', saleData.id)
 
-      // Generate invoice
+      // Generate invoice PDF for download (not uploaded to avoid RLS issues)
       const invoiceNo = `POS-${Date.now()}`
-      console.log('Generating invoice PDF...')
+      let invoicePdfBlob: Blob | null = null
       
-      let pdfBlob: Blob
       try {
-        pdfBlob = await generateInvoicePDF({
+        console.log('Generating invoice PDF...')
+        invoicePdfBlob = await generateInvoicePDF({
           invoiceNo,
           orderId: saleData.id,
           customerName: customerName || 'Walk-in Customer',
@@ -329,50 +329,22 @@ export default function POS() {
           paymentMode: 'Cash',
         })
         console.log('Invoice PDF generated successfully')
+        
+        // Offer download instead of upload (avoids RLS policy issues)
+        if (invoicePdfBlob) {
+          const url = URL.createObjectURL(invoicePdfBlob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${invoiceNo}.pdf`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
+          console.log('Invoice PDF download initiated')
+        }
       } catch (pdfError) {
         console.error('Error generating PDF:', pdfError)
-        // Continue even if PDF generation fails
-        pdfBlob = new Blob()
-      }
-
-      // Upload PDF (only if PDF was generated)
-      // Note: For POS sales, we don't insert into invoices table (it references orders table)
-      // We just upload the PDF for record keeping
-      // PDF upload is optional - sale will complete even if upload fails
-      if (pdfBlob.size > 0) {
-        try {
-          // Use just the filename, not invoices/filename (bucket name is already specified)
-          const fileName = `${invoiceNo}.pdf`
-          console.log('Uploading invoice PDF to storage...')
-          
-          const { error: uploadError } = await supabase.storage
-            .from('invoices')
-            .upload(fileName, pdfBlob, { 
-              contentType: 'application/pdf',
-              upsert: true // Overwrite if exists
-            })
-
-          if (uploadError) {
-            console.error('Error uploading PDF:', uploadError)
-            console.warn('PDF upload failed, but sale is still saved. To fix:')
-            console.warn('1. Go to Supabase Dashboard → Storage → invoices bucket')
-            console.warn('2. Go to Policies tab')
-            console.warn('3. Add policy: Allow authenticated users to INSERT objects')
-            console.warn('4. Policy: authenticated users can upload files')
-            // Continue - sale is already saved, PDF upload is optional
-          } else {
-            console.log('PDF uploaded successfully')
-            // Get public URL for reference (optional)
-            const { data: urlData } = supabase.storage
-              .from('invoices')
-              .getPublicUrl(fileName)
-            console.log('Invoice PDF URL:', urlData.publicUrl)
-          }
-        } catch (uploadErr: any) {
-          console.error('Exception during PDF upload:', uploadErr)
-          console.warn('PDF upload failed, but sale is still saved.')
-          // Continue - sale is already saved
-        }
+        // Continue - invoice generation is optional, sale is already saved
       }
 
       // Update stock
@@ -411,7 +383,8 @@ export default function POS() {
       setSearchQuery('')
 
       // Show success message
-      const successMessage = `✅ Sale Completed Successfully!\n\nSale ID: ${saleData.id.substring(0, 8)}...\nInvoice: ${invoiceNo}\nTotal: ₹${total.toFixed(2)}\n\nThank you for your business!`
+      const invoiceNote = invoicePdfBlob ? '\n\nInvoice PDF has been downloaded automatically.' : '\n\nNote: Invoice generation was skipped.'
+      const successMessage = `✅ Sale Completed Successfully!\n\nSale ID: ${saleData.id.substring(0, 8)}...\nInvoice: ${invoiceNo}\nTotal: ₹${total.toFixed(2)}${invoiceNote}\n\nThank you for your business!`
       alert(successMessage)
       
       console.log('Checkout completed successfully')
