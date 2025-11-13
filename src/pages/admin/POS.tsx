@@ -46,14 +46,10 @@ export default function POS() {
 
   const startScanning = async () => {
     try {
-      // Request camera permission first
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      stream.getTracks().forEach(track => track.stop()) // Stop the test stream
-      
       setShowScanner(true)
       
       // Wait for video element to be ready
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise(resolve => setTimeout(resolve, 300))
       
       if (!videoRef.current) {
         alert('Video element not ready')
@@ -62,6 +58,8 @@ export default function POS() {
       }
 
       codeReader.current = new BrowserMultiFormatReader()
+      
+      // Get available cameras
       const devices = await codeReader.current.listVideoInputDevices()
       
       if (devices.length === 0) {
@@ -73,22 +71,53 @@ export default function POS() {
       // Try to use back camera first (for mobile), fallback to first available
       const backCamera = devices.find(device => 
         device.label.toLowerCase().includes('back') || 
-        device.label.toLowerCase().includes('rear')
+        device.label.toLowerCase().includes('rear') ||
+        device.label.toLowerCase().includes('environment')
       )
       const deviceId = backCamera?.deviceId || devices[0].deviceId
 
-      await codeReader.current.decodeFromVideoDevice(
+      console.log('Starting scanner with device:', deviceId)
+
+      // Get the video stream and set it to video element
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId: { exact: deviceId },
+          facingMode: 'environment'
+        }
+      })
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+
+      // Start decoding from video device
+      codeReader.current.decodeFromVideoDevice(
         deviceId,
         videoRef.current,
         (result, error) => {
           if (result) {
             const barcode = result.getText()
-            console.log('Barcode scanned:', barcode)
+            console.log('✅ Barcode scanned successfully:', barcode)
+            
+            // Stop scanning first
+            if (codeReader.current) {
+              codeReader.current.reset()
+            }
+            
+            // Stop video stream
+            stream.getTracks().forEach(track => track.stop())
+            
+            // Handle the scanned barcode
             handleBarcodeScanned(barcode)
-            stopScanning()
+            setShowScanner(false)
           }
-          if (error && error.name !== 'NotFoundException') {
-            console.error('Scan error:', error)
+          
+          if (error) {
+            // NotFoundError is normal - it means no barcode found yet, keep scanning
+            if (error.name !== 'NotFoundException') {
+              console.warn('Scan error:', error.name, error.message)
+            }
           }
         }
       )
@@ -108,6 +137,13 @@ export default function POS() {
   const stopScanning = () => {
     if (codeReader.current) {
       codeReader.current.reset()
+      codeReader.current = null
+    }
+    // Stop all video tracks
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream
+      stream.getTracks().forEach(track => track.stop())
+      videoRef.current.srcObject = null
     }
     setShowScanner(false)
   }
@@ -280,12 +316,21 @@ export default function POS() {
                     autoPlay
                     playsInline
                     muted
+                    id="scanner-video"
                   />
                   <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute inset-0 border-4 border-primary rounded-xl" style={{
-                      borderWidth: '2px',
+                    <div className="absolute inset-0 border-2 border-primary rounded-xl" style={{
                       boxShadow: 'inset 0 0 0 2px rgba(37, 99, 235, 0.5)'
                     }} />
+                    {/* Scanning indicator */}
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                      <div className="w-48 h-1 bg-primary/30 rounded-full overflow-hidden">
+                        <div className="h-full bg-primary animate-pulse" style={{
+                          width: '60%',
+                          animation: 'scan 2s ease-in-out infinite'
+                        }} />
+                      </div>
+                    </div>
                   </div>
                   <button
                     onClick={stopScanning}
@@ -296,7 +341,7 @@ export default function POS() {
                   </button>
                   <div className="absolute bottom-4 left-0 right-0 text-center">
                     <p className="bg-black/70 text-white px-4 py-2 rounded-lg text-sm">
-                      Point camera at barcode
+                      Point camera at barcode - Keep steady
                     </p>
                   </div>
                 </div>
