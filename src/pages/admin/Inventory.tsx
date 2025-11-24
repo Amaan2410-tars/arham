@@ -191,11 +191,10 @@ export default function Inventory() {
             throw uploadError
           }
 
-          const { data: urlData, error: urlError } = supabase.storage
+          const { data: urlData } = supabase.storage
             .from(PRODUCT_IMAGE_BUCKET)
             .getPublicUrl(filePath)
 
-          if (urlError) throw urlError
           uploadedImageUrl = urlData.publicUrl
         } catch (error) {
           console.error('Image upload error:', error)
