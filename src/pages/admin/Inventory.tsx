@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Edit, Trash2, Download, Search, Camera, X } from 'lucide-react'
+import { Plus, Edit, Trash2, Download, Search, Camera, X, ImagePlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library'
+
+const PRODUCT_IMAGE_BUCKET = 'product-images'
 
 interface Product {
   id: string
@@ -10,7 +11,6 @@ interface Product {
   category: string
   price: number
   stock: number
-  barcode?: string
   description?: string
   image_url?: string
 }
@@ -21,27 +21,69 @@ export default function Inventory() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const codeReader = useRef<BrowserMultiFormatReader | null>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
   const [formData, setFormData] = useState({
     name: '',
     category: '',
     price: '',
     stock: '',
-    barcode: '',
     description: '',
     image_url: '',
   })
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
 
   useEffect(() => {
     fetchProducts()
+  }, [])
+
+  useEffect(() => {
     return () => {
-      if (codeReader.current) {
-        codeReader.current.reset()
+      if (imagePreview && imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview)
       }
     }
-  }, [])
+  }, [imagePreview])
+
+  const handleImageSelection = (file: File | null) => {
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file.')
+      return
+    }
+
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      alert('Please choose an image smaller than 5MB.')
+      return
+    }
+
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+    setFormData(prev => ({ ...prev, image_url: '' }))
+  }
+
+  const handleGalleryPick = (event: React.ChangeEvent<HTMLInputElement>) => {
+    handleImageSelection(event.target.files?.[0] || null)
+    event.target.value = ''
+  }
+
+  const clearSelectedImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    setFormData(prev => ({ ...prev, image_url: '' }))
+  }
+
+  const generateFileName = (extension: string) => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return `${crypto.randomUUID()}.${extension}`
+    }
+    const randomPart = Math.random().toString(36).slice(2, 10)
+    return `${Date.now()}-${randomPart}.${extension}`
+  }
 
   const fetchProducts = async () => {
     try {
@@ -126,14 +168,52 @@ export default function Inventory() {
     }
 
     try {
+      let uploadedImageUrl = formData.image_url.trim() || null
+
+      if (imageFile) {
+        setUploadingImage(true)
+        try {
+          const fileExtension =
+            imageFile.name.split('.').pop()?.toLowerCase() ||
+            imageFile.type.split('/').pop() ||
+            'jpg'
+          const filePath = `products/${generateFileName(fileExtension)}`
+
+          const { error: uploadError } = await supabase.storage
+            .from(PRODUCT_IMAGE_BUCKET)
+            .upload(filePath, imageFile, {
+              cacheControl: '3600',
+              upsert: false,
+              contentType: imageFile.type || 'image/jpeg',
+            })
+
+          if (uploadError) {
+            throw uploadError
+          }
+
+          const { data: urlData, error: urlError } = supabase.storage
+            .from(PRODUCT_IMAGE_BUCKET)
+            .getPublicUrl(filePath)
+
+          if (urlError) throw urlError
+          uploadedImageUrl = urlData.publicUrl
+        } catch (error) {
+          console.error('Image upload error:', error)
+          alert('Could not upload the photo. Please try again or use an image URL instead.')
+          setUploadingImage(false)
+          return
+        } finally {
+          setUploadingImage(false)
+        }
+      }
+
       const productData = {
         name: formData.name.trim(),
         category: formData.category.trim(),
         price: parseFloat(formData.price),
         stock: parseInt(formData.stock),
-        barcode: formData.barcode.trim() || null,
         description: formData.description.trim() || null,
-        image_url: formData.image_url.trim() || null,
+        image_url: uploadedImageUrl,
       }
 
       let error, data
@@ -213,10 +293,11 @@ export default function Inventory() {
       category: product.category,
       price: product.price.toString(),
       stock: product.stock.toString(),
-      barcode: product.barcode || '',
       description: product.description || '',
       image_url: product.image_url || '',
     })
+    setImageFile(null)
+    setImagePreview(null)
     setShowModal(true)
   }
 
@@ -226,16 +307,17 @@ export default function Inventory() {
       category: '',
       price: '',
       stock: '',
-      barcode: '',
       description: '',
       image_url: '',
     })
+    setImageFile(null)
+    setImagePreview(null)
   }
 
   const handleExport = () => {
     const csv = [
-      ['Name', 'Category', 'Price', 'Stock', 'Barcode'].join(','),
-      ...products.map(p => [p.name, p.category, p.price, p.stock, p.barcode || ''].join(','))
+      ['Name', 'Category', 'Price', 'Stock'].join(','),
+      ...products.map(p => [p.name, p.category, p.price, p.stock].join(','))
     ].join('\n')
     
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -244,132 +326,6 @@ export default function Inventory() {
     a.href = url
     a.download = 'inventory.csv'
     a.click()
-  }
-
-  const startBarcodeScanning = async () => {
-    try {
-      setShowBarcodeScanner(true)
-      
-      // Wait for video element to be ready
-      await new Promise(resolve => setTimeout(resolve, 300))
-      
-      if (!videoRef.current) {
-        alert('Video element not ready')
-        setShowBarcodeScanner(false)
-        return
-      }
-
-      // Configure scanner with barcode format hints for better detection
-      const hints = new Map()
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-        BarcodeFormat.EAN_13,
-        BarcodeFormat.EAN_8,
-        BarcodeFormat.UPC_A,
-        BarcodeFormat.UPC_E,
-        BarcodeFormat.CODE_128,
-        BarcodeFormat.CODE_39,
-        BarcodeFormat.CODE_93,
-        BarcodeFormat.ITF,
-        BarcodeFormat.CODABAR,
-        BarcodeFormat.QR_CODE,
-        BarcodeFormat.DATA_MATRIX
-      ])
-      hints.set(DecodeHintType.TRY_HARDER, true)
-      hints.set(DecodeHintType.ASSUME_GS1, false)
-      
-      codeReader.current = new BrowserMultiFormatReader(hints)
-      const devices = await codeReader.current.listVideoInputDevices()
-      
-      if (devices.length === 0) {
-        alert('No camera found. Please ensure your device has a camera and grant camera permissions.')
-        setShowBarcodeScanner(false)
-        return
-      }
-
-      const backCamera = devices.find(device => 
-        device.label.toLowerCase().includes('back') || 
-        device.label.toLowerCase().includes('rear') ||
-        device.label.toLowerCase().includes('environment')
-      )
-      const deviceId = backCamera?.deviceId || devices[0].deviceId
-
-      console.log('Starting barcode scanner with device:', deviceId)
-
-      // Get the video stream with better quality settings for barcode scanning
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          deviceId: { exact: deviceId },
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      })
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
-
-      codeReader.current.decodeFromVideoDevice(
-        deviceId,
-        videoRef.current,
-        (result, error) => {
-          if (result) {
-            const barcode = result.getText()
-            console.log('✅ Barcode scanned successfully:', barcode)
-            
-            // Stop scanning first
-            if (codeReader.current) {
-              codeReader.current.reset()
-            }
-            
-            // Stop video stream
-            stream.getTracks().forEach(track => track.stop())
-            
-            // Update form data with scanned barcode
-            setFormData(prev => ({ ...prev, barcode }))
-            setShowBarcodeScanner(false)
-          }
-          
-          if (error) {
-            // NotFoundError is normal - it means no barcode found yet, keep scanning
-            if (error.name === 'NotFoundException') {
-              // This is expected - no barcode detected yet, keep scanning
-              return
-            }
-            
-            // Log other errors but don't stop scanning
-            if (error.message && !error.message.includes('No MultiFormat Readers')) {
-              console.warn('Scan error:', error.name, error.message)
-            }
-          }
-        }
-      )
-    } catch (error: any) {
-      console.error('Error starting scanner:', error)
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        alert('Camera permission denied. Please allow camera access in your browser settings.')
-      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-        alert('No camera found. Please ensure your device has a camera.')
-      } else {
-        alert('Error accessing camera: ' + (error.message || 'Unknown error'))
-      }
-      setShowBarcodeScanner(false)
-    }
-  }
-
-  const stopBarcodeScanning = () => {
-    if (codeReader.current) {
-      codeReader.current.reset()
-      codeReader.current = null
-    }
-    // Stop all video tracks
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream
-      stream.getTracks().forEach(track => track.stop())
-      videoRef.current.srcObject = null
-    }
-    setShowBarcodeScanner(false)
   }
 
   const filteredProducts = products.filter(p =>
@@ -456,12 +412,6 @@ export default function Inventory() {
                       {product.stock}
                     </span>
                   </div>
-                  {product.barcode && (
-                    <div className="col-span-2">
-                      <span className="text-gray-600 dark:text-gray-400">Barcode:</span>
-                      <span className="ml-1">{product.barcode}</span>
-                    </div>
-                  )}
                 </div>
               </div>
             ))}
@@ -477,7 +427,6 @@ export default function Inventory() {
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Category</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Price</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Stock</th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase hidden lg:table-cell">Barcode</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -490,7 +439,6 @@ export default function Inventory() {
                       <td className={`px-4 lg:px-6 py-4 text-sm ${product.stock < 10 ? 'text-red-600 font-bold' : ''}`}>
                         {product.stock}
                       </td>
-                      <td className="px-4 lg:px-6 py-4 text-sm hidden lg:table-cell">{product.barcode || '-'}</td>
                       <td className="px-4 lg:px-6 py-4">
                         <div className="flex space-x-2">
                           <button
@@ -573,80 +521,77 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-1.5 sm:mb-2 text-sm sm:text-base">Barcode</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={formData.barcode}
-                      onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                      className="flex-1 px-3 sm:px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm sm:text-base"
-                      placeholder="Enter or scan barcode"
-                    />
-                    <button
-                      type="button"
-                      onClick={showBarcodeScanner ? stopBarcodeScanning : startBarcodeScanning}
-                      className={`px-3 sm:px-4 py-2 rounded-xl font-medium flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base touch-manipulation ${
-                        showBarcodeScanner
-                          ? 'bg-red-500 hover:bg-red-600 text-white'
-                          : 'bg-primary hover:bg-primary-dark text-white'
-                      }`}
-                      aria-label={showBarcodeScanner ? 'Stop scanning' : 'Scan barcode'}
-                    >
-                      <Camera size={18} />
-                      <span className="hidden sm:inline">{showBarcodeScanner ? 'Stop' : 'Scan'}</span>
-                    </button>
-                  </div>
-                  {showBarcodeScanner && (
-                    <div className="mt-3 relative bg-black rounded-xl overflow-hidden">
-                      <video
-                        ref={videoRef}
-                        className="w-full"
-                        style={{ maxHeight: '300px', objectFit: 'contain' }}
-                        autoPlay
-                        playsInline
-                        muted
-                        id="barcode-scanner-video"
-                      />
-                      <div className="absolute inset-0 pointer-events-none">
-                        <div className="absolute inset-0 border-2 border-primary rounded-xl" style={{
-                          boxShadow: 'inset 0 0 0 2px rgba(37, 99, 235, 0.5)'
-                        }} />
-                        {/* Scanning indicator */}
-                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                          <div className="w-32 h-1 bg-primary/30 rounded-full overflow-hidden">
-                            <div className="h-full bg-primary animate-pulse" style={{
-                              width: '60%',
-                              animation: 'scan 2s ease-in-out infinite'
-                            }} />
-                          </div>
-                        </div>
+                  <label className="block font-medium mb-1.5 sm:mb-2 text-sm sm:text-base">
+                    Product Photo
+                  </label>
+                  <div className="space-y-3">
+                    {imagePreview || formData.image_url ? (
+                      <div className="relative w-32 h-32 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                        <img
+                          src={imagePreview || formData.image_url}
+                          alt="Selected product"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={clearSelectedImage}
+                          className="absolute top-1 right-1 bg-black/70 text-white rounded-full p-1 hover:bg-black focus:outline-none focus:ring-2 focus:ring-primary"
+                          aria-label="Remove photo"
+                        >
+                          <X size={14} />
+                        </button>
                       </div>
+                    ) : (
+                      <div className="w-full px-4 py-6 text-center border border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-sm text-gray-500">
+                        No photo selected
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={stopBarcodeScanning}
-                        className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full shadow-lg touch-manipulation z-10"
-                        aria-label="Stop scanning"
+                        type="button"
+                        onClick={() => galleryInputRef.current?.click()}
+                        className="btn-secondary flex items-center space-x-2 text-sm sm:text-base"
                       >
-                        <X size={18} />
+                        <ImagePlus size={18} />
+                        <span>Choose photo</span>
                       </button>
-                      <div className="absolute bottom-2 left-0 right-0 text-center space-y-1">
-                        <p className="bg-black/70 text-white px-3 py-1 rounded-lg text-xs">
-                          Point camera at barcode - Keep steady and well-lit
-                        </p>
-                        <p className="bg-black/50 text-white/80 px-2 py-0.5 rounded text-xs">
-                          EAN, UPC, Code128, Code39, QR
-                        </p>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="btn-secondary flex items-center space-x-2 text-sm sm:text-base"
+                      >
+                        <Camera size={18} />
+                        <span>Take photo</span>
+                      </button>
                     </div>
-                  )}
+                    <input
+                      ref={galleryInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleGalleryPick}
+                    />
+                    <input
+                      ref={cameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={handleGalleryPick}
+                    />
+                    <p className="text-xs text-gray-500">JPG, PNG up to 5MB. Camera option works best on mobile.</p>
+                  </div>
                 </div>
                 <div>
-                  <label className="block font-medium mb-2">Image URL</label>
+                  <label className="block font-medium mb-2 text-sm sm:text-base">Image URL (optional)</label>
                   <input
                     type="url"
+                    placeholder="Paste an existing image link"
                     value={formData.image_url}
                     onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
                     className="w-full px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Use this if your product image is already hosted online.</p>
                 </div>
               </div>
               <div>
@@ -662,7 +607,6 @@ export default function Inventory() {
                 <button
                   type="button"
                   onClick={() => {
-                    stopBarcodeScanning()
                     setShowModal(false)
                     setEditingProduct(null)
                     resetForm()
@@ -671,8 +615,16 @@ export default function Inventory() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary text-sm sm:text-base">
-                  {editingProduct ? 'Update' : 'Add'} Product
+                <button
+                  type="submit"
+                  className={`btn-primary text-sm sm:text-base ${uploadingImage ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  disabled={uploadingImage}
+                >
+                  {uploadingImage
+                    ? 'Uploading photo...'
+                    : editingProduct
+                      ? 'Update Product'
+                      : 'Add Product'}
                 </button>
               </div>
             </form>

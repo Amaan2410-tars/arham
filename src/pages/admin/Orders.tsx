@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Eye, Search, CheckCircle, XCircle, CreditCard, AlertCircle } from 'lucide-react'
+import { Eye, Search, CheckCircle, XCircle, CreditCard, AlertCircle, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 interface Order {
@@ -65,6 +65,28 @@ export default function Orders() {
     } catch (error: any) {
       console.error('Error marking payment:', error)
       alert(`Error: ${error.message || 'Unknown error'}`)
+    }
+  }
+
+  const handleDeleteOrder = async (order: Order) => {
+    if (order.payment_status !== 'received') {
+      alert('Only orders marked as received can be deleted.')
+      return
+    }
+
+    if (!confirm(`Delete order ${order.id.slice(0, 8)}...? This cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase.from('orders').delete().eq('id', order.id)
+      if (error) throw error
+      alert('Order deleted.')
+      setSelectedOrder(prev => (prev?.id === order.id ? null : prev))
+      fetchOrders()
+    } catch (error: any) {
+      console.error('Error deleting order:', error)
+      alert(`Error deleting order: ${error.message || 'Unknown error'}`)
     }
   }
 
@@ -232,6 +254,15 @@ export default function Orders() {
                         >
                           <Eye size={18} />
                         </button>
+                        {order.payment_status === 'received' && (
+                          <button
+                            onClick={() => handleDeleteOrder(order)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            title="Delete order (received only)"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -343,6 +374,15 @@ export default function Orders() {
                       >
                         <XCircle size={18} />
                         <span>Mark Payment Pending</span>
+                      </button>
+                    )}
+                    {selectedOrder.payment_status === 'received' && (
+                      <button
+                        onClick={() => handleDeleteOrder(selectedOrder)}
+                        className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2"
+                      >
+                        <Trash2 size={18} />
+                        <span>Delete Order</span>
                       </button>
                     )}
                   </div>

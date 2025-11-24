@@ -59,6 +59,10 @@ CREATE INDEX IF NOT EXISTS idx_pos_sales_created_at ON pos_sales(created_at);
 -- Bucket name: invoices
 -- Public: true
 
+-- Create storage bucket for product photos
+-- Bucket name: product-images
+-- Public: true
+
 -- Row Level Security (RLS) Policies
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
